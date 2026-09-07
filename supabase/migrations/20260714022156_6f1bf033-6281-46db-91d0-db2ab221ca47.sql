@@ -1,0 +1,2 @@
+ALTER TABLE public.products ALTER COLUMN category DROP DEFAULT;
+ALTER TABLE public.products ALTER COLUMN unit DROP DEFAULT;

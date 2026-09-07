@@ -1,0 +1,55 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1788177358836,
+      "tag": "0000_journal_writer_and_line_guards",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1788177648579,
+      "tag": "0001_replace_journal_entry_lines_posted_number",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1788177931893,
+      "tag": "0002_journal_and_document_integrity_guards",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1788182392858,
+      "tag": "0003_inventory_reports_rpcs",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1788184066894,
+      "tag": "0004_inventory_reports_add_model_number",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1788184290173,
+      "tag": "0005_inventory_kpis_add_product_identity",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1788198579660,
+      "tag": "0006_add_last_supplier_to_inventory_reports",
+      "breakpoints": true
+    }
+  ]
+}

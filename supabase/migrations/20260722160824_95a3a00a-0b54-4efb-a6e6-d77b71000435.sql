@@ -1,0 +1,4 @@
+CREATE POLICY "Admins can view restore backups" ON storage.objects FOR SELECT TO authenticated USING (bucket_id = 'restore-backups' AND public.has_role(auth.uid(), 'admin'));
+CREATE POLICY "Admins can upload restore backups" ON storage.objects FOR INSERT TO authenticated WITH CHECK (bucket_id = 'restore-backups' AND public.has_role(auth.uid(), 'admin'));
+CREATE POLICY "Admins can update restore backups" ON storage.objects FOR UPDATE TO authenticated USING (bucket_id = 'restore-backups' AND public.has_role(auth.uid(), 'admin')) WITH CHECK (bucket_id = 'restore-backups' AND public.has_role(auth.uid(), 'admin'));
+CREATE POLICY "Admins can delete restore backups" ON storage.objects FOR DELETE TO authenticated USING (bucket_id = 'restore-backups' AND public.has_role(auth.uid(), 'admin'));

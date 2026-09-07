@@ -1,0 +1,267 @@
+@import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 98%;
+    --foreground: 220 20% 14%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 220 20% 14%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 220 20% 14%;
+
+    --primary: 24 95% 53%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 220 14% 96%;
+    --secondary-foreground: 220 20% 14%;
+
+    --muted: 220 14% 96%;
+    --muted-foreground: 220 8% 46%;
+
+    --accent: 24 95% 95%;
+    --accent-foreground: 24 95% 30%;
+
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+
+    --success: 152 60% 42%;
+    --success-foreground: 0 0% 100%;
+
+    --warning: 38 92% 50%;
+    --warning-foreground: 0 0% 100%;
+
+    --border: 220 13% 91%;
+    --input: 220 13% 91%;
+    --ring: 24 95% 53%;
+
+    --radius: 0.625rem;
+
+    --sidebar-background: 0 0% 100%;
+    --sidebar-foreground: 220 20% 14%;
+    --sidebar-primary: 24 95% 53%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 24 95% 97%;
+    --sidebar-accent-foreground: 24 95% 30%;
+    --sidebar-border: 220 13% 93%;
+    --sidebar-ring: 24 95% 53%;
+
+    /* Category colors */
+    --cat-inventory: 152 60% 42%;
+    --cat-accounting: 217 80% 50%;
+    --cat-sales: 340 65% 50%;
+    --cat-purchases: 24 95% 53%;
+    --cat-reports: 262 60% 50%;
+    --cat-settings: 220 8% 46%;
+  }
+
+  .dark {
+    --background: 220 20% 7%;
+    --foreground: 220 14% 92%;
+
+    --card: 220 20% 10%;
+    --card-foreground: 220 14% 92%;
+
+    --popover: 220 20% 10%;
+    --popover-foreground: 220 14% 92%;
+
+    --primary: 24 95% 58%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 220 20% 15%;
+    --secondary-foreground: 220 14% 92%;
+
+    --muted: 220 20% 13%;
+    --muted-foreground: 220 10% 55%;
+
+    --accent: 24 95% 15%;
+    --accent-foreground: 24 95% 70%;
+
+    --destructive: 0 62% 30%;
+    --destructive-foreground: 0 0% 100%;
+
+    --success: 152 60% 35%;
+    --success-foreground: 0 0% 100%;
+
+    --warning: 38 92% 40%;
+    --warning-foreground: 0 0% 100%;
+
+    --border: 220 20% 18%;
+    --input: 220 20% 18%;
+    --ring: 24 95% 58%;
+
+    --sidebar-background: 220 20% 9%;
+    --sidebar-foreground: 220 14% 85%;
+    --sidebar-primary: 24 95% 58%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 220 20% 14%;
+    --sidebar-accent-foreground: 220 14% 85%;
+    --sidebar-border: 220 20% 14%;
+    --sidebar-ring: 24 95% 58%;
+
+    --cat-inventory: 152 60% 45%;
+    --cat-accounting: 217 80% 60%;
+    --cat-sales: 340 65% 60%;
+    --cat-purchases: 24 95% 58%;
+    --cat-reports: 262 60% 60%;
+    --cat-settings: 220 10% 55%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  html {
+    direction: rtl;
+    font-family: 'Tajawal', sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-weight: 500;
+    letter-spacing: 0.01em;
+    line-height: 1.7;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-weight: 700;
+    letter-spacing: -0.01em;
+  }
+
+  table {
+    font-weight: 500;
+    font-size: 0.9rem;
+  }
+
+  th {
+    font-weight: 700 !important;
+  }
+
+  /* Unified tabular numbers for all numeric content */
+  .font-mono,
+  .tabular-nums,
+  td .font-mono {
+    font-family: 'IBM Plex Sans Arabic', 'Tajawal', system-ui, sans-serif;
+    font-variant-numeric: tabular-nums lining-nums;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    font-size: 0.9rem;
+  }
+
+  button, [role="button"] {
+    font-weight: 600;
+  }
+
+  ::-webkit-scrollbar {
+    width: 5px;
+    height: 5px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: hsl(var(--border));
+    border-radius: 10px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--muted-foreground) / 0.3);
+  }
+}
+
+/* ============================================
+   Sonner Toaster — Unified professional design
+   ============================================ */
+[data-sonner-toaster] {
+  font-family: 'Tajawal', 'IBM Plex Sans Arabic', system-ui, sans-serif !important;
+}
+
+[data-sonner-toaster] [data-sonner-toast] {
+  font-family: inherit !important;
+  border-radius: 12px !important;
+  padding: 14px 16px !important;
+  gap: 12px !important;
+  box-shadow:
+    0 10px 30px -10px hsl(220 20% 14% / 0.18),
+    0 4px 12px -4px hsl(220 20% 14% / 0.08) !important;
+  border-width: 1px !important;
+  backdrop-filter: blur(8px);
+}
+
+[data-sonner-toaster] [data-sonner-toast] [data-title] {
+  font-family: inherit !important;
+  font-weight: 700 !important;
+  font-size: 14px !important;
+  line-height: 1.4 !important;
+  letter-spacing: -0.01em !important;
+}
+
+[data-sonner-toaster] [data-sonner-toast] [data-description] {
+  font-family: inherit !important;
+  font-weight: 500 !important;
+  font-size: 13px !important;
+  line-height: 1.5 !important;
+  margin-top: 2px !important;
+  opacity: 0.85;
+}
+
+[data-sonner-toaster] [data-sonner-toast] [data-icon] {
+  width: 20px !important;
+  height: 20px !important;
+  margin-top: 1px !important;
+}
+
+[data-sonner-toaster] [data-sonner-toast] [data-icon] > svg {
+  width: 20px !important;
+  height: 20px !important;
+  stroke-width: 2.25 !important;
+}
+
+/* Close button — small, subtle, RTL-aware (left side) */
+[data-sonner-toaster] [data-sonner-toast] [data-close-button] {
+  width: 22px !important;
+  height: 22px !important;
+  border-radius: 6px !important;
+  background: transparent !important;
+  border: 1px solid transparent !important;
+  color: currentColor !important;
+  opacity: 0.5;
+  transition: all 0.15s ease;
+  top: 10px !important;
+  left: 10px !important;
+  right: auto !important;
+}
+
+[data-sonner-toaster] [data-sonner-toast] [data-close-button]:hover {
+  opacity: 1;
+  background: hsl(var(--foreground) / 0.08) !important;
+}
+
+[data-sonner-toaster] [data-sonner-toast] [data-close-button] > svg {
+  width: 13px !important;
+  height: 13px !important;
+}
+
+/* Vibrant left accent bar per variant (RTL → right side) */
+[data-sonner-toaster] [data-sonner-toast][data-type="success"] {
+  border-right: 4px solid hsl(var(--success)) !important;
+}
+[data-sonner-toaster] [data-sonner-toast][data-type="error"] {
+  border-right: 4px solid hsl(var(--destructive)) !important;
+}
+[data-sonner-toaster] [data-sonner-toast][data-type="warning"] {
+  border-right: 4px solid hsl(var(--warning)) !important;
+}
+[data-sonner-toaster] [data-sonner-toast][data-type="info"] {
+  border-right: 4px solid hsl(var(--primary)) !important;
+}

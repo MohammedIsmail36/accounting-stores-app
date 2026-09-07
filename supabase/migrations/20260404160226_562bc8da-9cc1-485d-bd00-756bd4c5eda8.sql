@@ -1,0 +1,1 @@
+ALTER TABLE public.company_settings ADD COLUMN IF NOT EXISTS enable_return_days_limit boolean NOT NULL DEFAULT true;

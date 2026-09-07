@@ -1,0 +1,1 @@
+ALTER TABLE public.company_settings ADD COLUMN enable_fiscal_year_closing boolean NOT NULL DEFAULT false;

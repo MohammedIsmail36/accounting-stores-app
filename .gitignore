@@ -1,0 +1,53 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Secrets and environment-specific configuration
+.env
+.env.*
+.npmrc
+.netrc
+*.pem
+*.key
+*.p12
+*.pfx
+*service-role*
+*service_role*
+*credentials*
+*secrets*
+
+node_modules
+dist
+dist-ssr
+coverage
+*.local
+*.tsbuildinfo
+*.tgz
+
+# Database dumps, runtime data, and backups
+*.dump
+*.sql.gz
+backup/
+backups/
+volumes/
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Generated local platform state
+supabase/.temp/
+bun.lock
+bun.lockb
