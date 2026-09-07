@@ -11,7 +11,11 @@ vi.mock("@/lib/notify", () => ({
 import { notify } from "@/lib/notify";
 
 const wrapper = ({ children }: { children: React.ReactNode }) => (
-  <MemoryRouter>{children}</MemoryRouter>
+  <MemoryRouter
+    future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
+  >
+    {children}
+  </MemoryRouter>
 );
 
 describe("useDocumentFormState", () => {

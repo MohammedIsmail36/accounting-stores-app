@@ -11,7 +11,14 @@ import { useNavigationGuard } from "./use-navigation-guard";
  */
 
 function wrapper({ children }: { children: ReactNode }) {
-  return <MemoryRouter initialEntries={["/purchases/new"]}>{children}</MemoryRouter>;
+  return (
+    <MemoryRouter
+      initialEntries={["/purchases/new"]}
+      future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
+    >
+      {children}
+    </MemoryRouter>
+  );
 }
 
 /**

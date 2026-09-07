@@ -126,7 +126,13 @@ const App = () => (
     <TooltipProvider>
       <Sonner />
       <ErrorBoundary>
-        <BrowserRouter basename={routerBasename}>
+        <BrowserRouter
+          basename={routerBasename}
+          future={{
+            v7_startTransition: true,
+            v7_relativeSplatPath: true,
+          }}
+        >
           <AuthProvider>
             <SettingsProvider>
             <PageTitleUpdater />
