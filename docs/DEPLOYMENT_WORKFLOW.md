@@ -72,6 +72,24 @@ bash scripts/check-repository-safety.sh
 
 يفضل دائماً أن تكون نسخة العمل نظيفة قبل النشر، حتى مع وجود آلية `stash` في السكربت.
 
+## نشر Staging الثابت يدوياً
+
+لا يدعم `scripts/deploy-all.sh` نطاق Staging، ولا يجوز تمرير Staging إليه كأنها شركة إنتاج. عند نشر بناء متحقق منه يدوياً إلى `/var/www/staging.alibea2020.com` يجب تنفيذ حاجز الصلاحيات التالي قبل `rsync`:
+
+```bash
+STAGING_BUILD_DIR=/tmp/accounting-staging-build.EXAMPLE
+find "$STAGING_BUILD_DIR" -type d -exec chmod 0755 {} +
+find "$STAGING_BUILD_DIR" -type f -exec chmod 0644 {} +
+test "$(stat -c '%a' "$STAGING_BUILD_DIR")" = "755"
+rsync -a --delete-delay --delay-updates "$STAGING_BUILD_DIR/" /var/www/staging.alibea2020.com/
+chmod 0755 /var/www/staging.alibea2020.com
+test "$(stat -c '%a' /var/www/staging.alibea2020.com)" = "755"
+```
+
+هذه قاعدة إلزامية: **ممنوع تشغيل `rsync -a` من مجلد أنشأه `mktemp -d` قبل تطبيع الصلاحيات**. وضع `mktemp` الافتراضي `0700`، و`rsync -a` قد ينسخه إلى جذر الموقع فيمنع مستخدم Nginx من عبور المجلد ويعيد HTTP 403. سكربت الإنتاج يطبق التطبيع آلياً بالفعل؛ هذه الخطوات تغطي نشر Staging اليدوي حتى إعداد سكربت مخصص لها.
+
+بعد النسخ يجب مقارنة البناء والوجهة، وفحص `/` و`/auth` والمسار المتغير عبر HTTPS، ثم التأكد من أن Nginx وDocker نشطان. نشر الواجهة الثابتة إلى Staging لا يبرر تطبيق migrations أو نسخ Edge Functions.
+
 ## خيارات معتمدة
 
 ```bash
