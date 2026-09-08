@@ -91,13 +91,33 @@ validate_publishable_key() {
   esac
 }
 
+validate_api_access() {
+  local company_name="$1" api_url="$2" key_value="$3" status
+
+  if ! status="$(curl -sS --retry 1 --connect-timeout 10 --max-time 20 \
+    -o /dev/null -w '%{http_code}' \
+    -H "apikey: $key_value" \
+    -H "Authorization: Bearer $key_value" \
+    "$api_url/rest/v1/company_settings?select=*&order=created_at.asc&limit=1")"; then
+    die "[$company_name] تعذر الاتصال بـAPI للتحقق من مفتاح النشر — أُوقف النشر قبل أي تغيير"
+  fi
+
+  [[ "$status" == "200" ]] \
+    || die "[$company_name] رفض API مفتاح النشر (HTTP $status) — تحقق من مصدر المفتاح؛ لا يكفي أن تكون صيغته صحيحة"
+
+  ok "[$company_name] مفتاح النشر مقبول من API الفعلي"
+}
+
 if [[ "$DO_BUILD" == true ]]; then
   for company_record in "${COMPANIES[@]}"; do
-    IFS=: read -r company_name _ _ _ _ variable_name <<< "$company_record"
+    IFS=: read -r company_name _ _ api_scheme api_rest variable_name <<< "$company_record"
     if [[ -n "$ONLY" && "$ONLY" != "$company_name" ]]; then
       continue
     fi
-    validate_publishable_key "$company_name" "$variable_name" "${!variable_name:-}"
+    api_url="$api_scheme:$api_rest"
+    publishable_key="${!variable_name:-}"
+    validate_publishable_key "$company_name" "$variable_name" "$publishable_key"
+    validate_api_access "$company_name" "$api_url" "$publishable_key"
   done
 fi
 
