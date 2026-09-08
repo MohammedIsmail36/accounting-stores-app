@@ -23,7 +23,11 @@ scripts/deploy-all.sh
 
 ```bash
 cd /opt/accounting-app
+test "$(git remote get-url origin)" = "https://github.com/MohammedIsmail36/accounting-stores-app.git"
+test -z "$(git status --porcelain)"
 ```
+
+`/opt/accounting-app` هو checkout الإنتاج الوحيد، ومصدره المعتمد `accounting-stores-app`. المستودع القديم الذي قد تدفع إليه أداة التطوير الخارجية ليس مصدر نشر ولا يجوز إعادته كـ`origin`. أي إضافة تُنشأ هناك تُنقل إلى المستودع الجديد بعد مراجعة مستقلة واختبار Staging، ولا تُسحب مباشرة إلى الإنتاج.
 
 حمّل مفاتيح الواجهة العامة من مصدر محمي خارج Git، ثم تحقق من وجودها **من دون طباعة قيمها**:
 
