@@ -48,6 +48,38 @@ describe("distributeNetTotals", () => {
     expect(r[1].net_total).toBe(60);
   });
 
+  it("يوزع باقي التقريب ويجعل مجموع السطور مطابقًا لصافي المستند", () => {
+    const r = distributeNetTotals(
+      [
+        { total: 1560 },
+        { total: 1440 },
+        { total: 1680 },
+        { total: 1440 },
+        { total: 1560 },
+        { total: 1560 },
+      ],
+      720,
+      9240,
+    );
+
+    expect(r.reduce((sum, row) => sum + row.net_total, 0)).toBe(8520);
+    expect(r.map((row) => row.net_total)).toEqual([
+      1438.44,
+      1327.79,
+      1549.1,
+      1327.79,
+      1438.44,
+      1438.44,
+    ]);
+  });
+
+  it("يعالج باقي التقريب السالب دون تغيير ترتيب السطور", () => {
+    const r = distributeNetTotals([{ total: 1 }, { total: 1 }, { total: 1 }], 1);
+
+    expect(r.map((row) => row.net_total)).toEqual([0.66, 0.67, 0.67]);
+    expect(r.reduce((sum, row) => sum + row.net_total, 0)).toBe(2);
+  });
+
   it("خصم مساوٍ للأساس يُصفّر الصافي", () => {
     const r = distributeNetTotals([{ total: 100 }, { total: 100 }], 200);
     expect(r.map((x) => x.net_total)).toEqual([0, 0]);

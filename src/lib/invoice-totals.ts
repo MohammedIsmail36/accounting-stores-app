@@ -58,13 +58,37 @@ export function calcInvoiceTotals({
  * المعادلة: net_total = total × (1 − reduction / base)
  * حيث base هو مجموع إجماليات السطور (أو قيمة صريحة مثل subtotal المُقرّب).
  * عند reduction = 0 تبقى القيمة مساوية للإجمالي الأصلي.
+ * إذا نتج فرق سنتات من تقريب كل سطر منفردًا، يُحمّل الفرق على أكبر سطر
+ * حتى يظل مجموع السطور مطابقًا لصافي المستند المحسوب.
  */
 export function distributeNetTotals<T extends { total: number }>(
   items: T[],
   reduction: number,
   base?: number,
 ): (T & { net_total: number })[] {
+  if (items.length === 0) return [];
+
   const total = base ?? items.reduce((s, i) => s + i.total, 0);
   const ratio = total > 0 && reduction > 0 ? reduction / total : 0;
-  return items.map((i) => ({ ...i, net_total: round2(i.total * (1 - ratio)) }));
+  const rawNetTotals = items.map((item) => item.total * (1 - ratio));
+  const roundedNetTotals = rawNetTotals.map((value) => round2(value));
+  const targetNetTotal = round2(rawNetTotals.reduce((sum, value) => sum + value, 0));
+  const roundedSum = round2(roundedNetTotals.reduce((sum, value) => sum + value, 0));
+  const residual = round2(targetNetTotal - roundedSum);
+
+  if (residual !== 0) {
+    const adjustmentIndex = rawNetTotals.reduce(
+      (largestIndex, value, index, values) =>
+        value > values[largestIndex] ? index : largestIndex,
+      0,
+    );
+    roundedNetTotals[adjustmentIndex] = round2(
+      roundedNetTotals[adjustmentIndex] + residual,
+    );
+  }
+
+  return items.map((item, index) => ({
+    ...item,
+    net_total: roundedNetTotals[index],
+  }));
 }
