@@ -108,6 +108,23 @@
 - وقت الفحص كان الخادم عاملاً منذ 50 يوماً، والقرص مستخدماً بنسبة 27%، والذاكرة المتاحة نحو 1.8GiB.
 - كانت مساحة swap البالغة 2GiB مستخدمة، لكن خمس عينات `vmstat` أظهرت صفراً مستمراً في `si` و`so` مع عدم وجود عمليات محجوبة؛ هذا استخدام راكد لا ضغط تبديل نشط، ولذلك لم تُفرغ swap ولم تُعد تشغيل الخدمات.
 
+## جرد التنظيف قبل الحذف
+
+أُجري جرد قراءة فقط بعد تثبيت المسار الأساسي. لم تظهر أي عملية عاملة أو خدمة Nginx أو systemd أو cron تشير إلى مجلدات الاختبار أو checkout القديم. بلغ مجموع مجلدات `/tmp` المستهدفة نحو 2.6GiB:
+
+- أبنية مؤقتة: `accounting-alibea-s3-3a-build-20260906-151305` (69MiB)، و`accounting-alibea-s3-3a-build-retry-20260906-151305` (15MiB)، و`accounting-s3-3c-baseline-dist.9QUH6Y` (7.5MiB)، و`accounting-s3-3c-incremental.ePAq1s` (7.2MiB)، و`accounting-s3-3c-simulation.hSdJ4a` (552MiB).
+- أبنية Staging مؤقتة: `accounting-staging-build` (7.5MiB)، و`accounting-staging-l6-uuid-build.4b5X1k` (6.7MiB)، و`accounting-staging-navbar-20260905` (7.5MiB)، و`accounting-staging-navbar-opaque-20260905` (7.5MiB)، و`accounting-staging-path-check` (7.5MiB)، و`accounting-staging-sales-catalog-20260905` (7.5MiB)، و`accounting-staging-subdomain-build` (7.5MiB).
+- نسخ Git التجريبية: `accounting-stores-app-l6-clone.yNDr4Y` (489MiB)، و`accounting-stores-app-l6-excel.RQLX9O` (490MiB)، و`accounting-stores-app-l6-final.jBQgYI` (490MiB)، و`accounting-stores-app-l6-uuid-final.4mc422` (491MiB).
+
+أظهرت ثلاث نسخ Git تغييرات تجريبية محلية: ملفان في تجربة Vite، وملفان في تجربة ExcelJS/UUID، وخمسة ملفات في تجربة React Router. يثبت `docs/L6_REPOSITORY_BOOTSTRAP_REPORT.md` أن النتائج المتحققة نُقلت إلى cleanroom وثُبتت في commits مستقلة ودُفعت إلى المستودع الجديد؛ النسخة الرابعة نظيفة عند `29ebc77`. لذلك لا توجد أعمال فريدة غير محفوظة داخل هذه النسخ.
+
+الـcheckout القديم المعزول في `/opt/backups/accounting-app/legacy-checkout-before-new-repo-20260908` حجمه 571MiB، وحالته نظيفة، و`HEAD` مطابق لـ`origin/main` للمستودع القديم بنتيجة `0 0`. مجموع المساحة المتوقع تحريرها من الأهداف المؤقتة والقديمة نحو 3.2GiB.
+
+لا يشمل التنظيف `/opt/accounting-app` أو `/var/www` أو `/opt/supabase-farida` أو `/opt/supabase-alibea` أو `/etc/accounting-stores-app`، ولا يشمل نسختي رجوع الواجهتين:
+
+- `/opt/backups/accounting-app/farida-l7-new-repo-before-20260908`
+- `/opt/backups/accounting-app/alibea-l7-new-repo-before-20260908`
+
 ## الحالة الحالية
 
 - Farida تعمل ببناء المستودع الجديد من الالتزام `5d8438f` ومعتمدة وظيفياً.
