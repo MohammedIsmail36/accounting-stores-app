@@ -70,6 +70,37 @@ fi
 
 cd "$APP_DIR" || die "المجلد غير موجود: $APP_DIR"
 
+validate_publishable_key() {
+  local company_name="$1" variable_name="$2" key_value="$3"
+
+  [[ -n "$key_value" ]] \
+    || die "[$company_name] متغير البيئة $variable_name غير مضبوط — أُوقف النشر قبل أي تغيير"
+
+  case "$key_value" in
+    \"*|*\"|\'*|*\')
+      die "[$company_name] قيمة $variable_name محاطة بعلامات اقتباس — استخدم source لملف البيئة ولا تستخرج القيمة الخام"
+      ;;
+  esac
+
+  [[ "$key_value" != *[[:space:]]* ]] \
+    || die "[$company_name] قيمة $variable_name تحتوي مسافات أو محارف سطر — أُوقف النشر"
+
+  case "$key_value" in
+    eyJ*.*.*|sb_publishable_*) ;;
+    *) die "[$company_name] قيمة $variable_name لا تطابق صيغة مفتاح Supabase العام" ;;
+  esac
+}
+
+if [[ "$DO_BUILD" == true ]]; then
+  for company_record in "${COMPANIES[@]}"; do
+    IFS=: read -r company_name _ _ _ _ variable_name <<< "$company_record"
+    if [[ -n "$ONLY" && "$ONLY" != "$company_name" ]]; then
+      continue
+    fi
+    validate_publishable_key "$company_name" "$variable_name" "${!variable_name:-}"
+  done
+fi
+
 # ------------------------------------------------------------
 # 1) سحب التحديثات مع حفظ التعديلات المحلية
 # ------------------------------------------------------------
