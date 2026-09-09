@@ -78,6 +78,9 @@ platform_content="$(rg -l --hidden --pcre2 \
   -g '!docs/DEPENDENCY_SECURITY_PLAN.md' \
   -g '!docs/SALES_REPORT_IMPROVEMENT_TRACKER.md' \
   -g '!docs/PLATFORM_REFERENCE_AUDIT.md' \
+  -g '!docs/MASTER_EXECUTION_PLAN.md' \
+  -g '!docs/L3_STAGING_RESTORE_RUNBOOK.md' \
+  -g '!docs/L3_STAGING_FARIDA_DATA_REHEARSAL.md' \
   -g '!scripts/check-repository-safety.sh' \
   -g '!supabase/migrations/20260419170758_1e4296a7-5cfa-429f-86d4-8cd8fe59158e.sql' \
   -g '!supabase/migrations/20260907091000_neutral_migration_tracking.sql' 2>/dev/null || true)"
