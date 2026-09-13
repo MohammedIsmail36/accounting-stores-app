@@ -130,6 +130,7 @@ created_at / updated_at timestamptz
 
 - `unique (repair_id, line_number)`.
 - `unique (repair_id, axis, issue_key)` لمنع تكرار الانحراف داخل الطلب.
+- لا يسمح بأكثر من عملية نشطة (`draft` أو `ready_for_review` أو `approved`) لنفس `axis + issue_key`. يتحقق RPC من ذلك داخل قفل استشاري خاص بمفتاح الانحراف لمنع سباق طلبين متزامنين، مع إبقاء العمليات التاريخية `cancelled` و`executed`.
 - يجب وجود `product_id` لمحور المنتج، و`source_type/source_id` لمحور المصدر المعروف.
 - القيم الكمية والمالية التي تقود القرار تحفظ في أعمدة `numeric` قابلة للفحص، ولا تدفن داخل JSON فقط. تستخدم حقول JSON للأدلة والسياق الإضافي.
 - لا تحفظ قيمة «بعد» إلا بواسطة منفذ قاعدة البيانات.
@@ -192,7 +193,7 @@ unique (request_id)
 create_inventory_reconciliation_repair(..., p_request_id uuid) -> jsonb
 update_inventory_reconciliation_repair(..., p_expected_version integer, p_request_id uuid) -> jsonb
 submit_inventory_reconciliation_repair(p_id, p_expected_version, p_request_id) -> jsonb
-approve_inventory_reconciliation_repair(p_id, p_expected_version, p_request_id) -> jsonb
+approve_inventory_reconciliation_repair(p_id, p_expected_version, p_separation_override_reason, p_request_id) -> jsonb
 cancel_inventory_reconciliation_repair(p_id, p_reason, p_expected_version, p_request_id) -> jsonb
 ```
 
@@ -206,6 +207,14 @@ reverse_inventory_reconciliation_repair(p_id, p_reason, p_expected_version, p_re
 ```
 
 تضاف كل حالة `repair_type` إلى المنفذ في دفعتها الخاصة. أي نوع غير مفعل يعيد `REPAIR_TYPE_NOT_ENABLED` قبل أي كتابة.
+
+تعيد أخطاء دورة المستند رموزاً ثابتة قابلة للعرض والترجمة في الواجهة، ومنها:
+
+- `REPAIR_DUPLICATE_ISSUE` عند تكرار الانحراف داخل الطلب نفسه.
+- `REPAIR_ISSUE_ACTIVE` عند وجود عملية نشطة أخرى للانحراف نفسه.
+- `REPAIR_VERSION_CONFLICT` عند إرسال نسخة قديمة.
+- `REPAIR_PRECONDITION_CHANGED` عند تغير السجل منذ المعاينة.
+- `REPAIR_TYPE_NOT_ENABLED` عند طلب تنفيذ نوع لم تعتمد دفعته بعد.
 
 ## 7. التزامن ومنع القرار القديم
 
@@ -310,15 +319,15 @@ events (repair_id, created_at)
 5. رفض منتج أو مصدر حالته `matched`.
 6. رفض فرق WAC وحده كبند إصلاح.
 7. رفض تكرار `issue_key` في العملية.
-8. نجاح الإرسال للمراجعة وقفل البنود.
-9. رفض تعديل بند بعد الإرسال.
-10. المدير وحده يعتمد.
-11. رفض الاعتماد عند تغير `version`.
-12. إعادة `request_id` نفسه لا تنشئ حدثاً أو عملية ثانية.
-13. رفض التنفيذ في 2B برسالة `REPAIR_TYPE_NOT_ENABLED` وبقاء بيانات الأعمال كما هي.
-14. إلغاء المسودة/المعتمدة حسب الصلاحية دون حذف.
-15. سلامة القيود الأجنبية وRLS والمنح و`search_path`.
-16. تطابق أعداد وصفوف جميع جداول الأعمال قبل الاختبار وبعد `ROLLBACK`.
+8. رفض فتح عملية نشطة ثانية لنفس `axis + issue_key` ولو كانت في رأس مختلف.
+9. نجاح الإرسال للمراجعة وقفل البنود.
+10. رفض تعديل بند بعد الإرسال.
+11. المدير وحده يعتمد.
+12. رفض الاعتماد عند تغير `version`.
+13. إعادة `request_id` نفسه لا تنشئ حدثاً أو عملية ثانية.
+14. رفض التنفيذ في 2B برسالة `REPAIR_TYPE_NOT_ENABLED` وبقاء بيانات الأعمال كما هي.
+15. إلغاء المسودة/المعتمدة حسب الصلاحية دون حذف.
+16. سلامة القيود الأجنبية وRLS والمنح و`search_path` وتطابق بيانات الأعمال بعد `ROLLBACK`.
 
 ## 13. اختبارات 2C الإضافية
 
@@ -351,3 +360,12 @@ events (repair_id, created_at)
 - اعتماد أن البصمة الموضعية هي حاجز التنفيذ، والبصمة العامة دليل تشخيص فقط.
 - قبول أن 2B يبني دورة المستند بلا أي إصلاح فعلي.
 - كتابة اختبارات TDD الحمراء للعقد أولاً.
+
+**حالة البوابة:** مكتملة بتاريخ 2026-09-13. اعتمد المستخدم العقد، وثُبتت سياسة الإلغاء وعدم الحذف، والفصل بين البصمة العامة وشرط البداية الموضعي، وحدود 2B دون كتابة على جداول الأعمال. نجح الأمر المعزول:
+
+```text
+sudo /usr/bin/node /opt/accounting-app/scripts/tests/rehearse-inventory-repair-lifecycle.mjs --expect-missing
+TDD_REPAIR_LIFECYCLE_RED_OK
+```
+
+أكد الاختبار غياب الجداول والدوال الجديدة كما هو متوقع قبل التنفيذ، ولم ينفذ سيناريوهات بيانات أو يغير L3 أو Staging أو الإنتاج. الخطوة التالية هي كتابة Migration 2B ثم تشغيل السيناريوهات الستة عشر داخل L3 مع `ROLLBACK` كامل.
