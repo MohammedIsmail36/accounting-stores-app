@@ -29,6 +29,10 @@ import {
 } from "@/lib/product-utils";
 import { ACCOUNT_CODES } from "@/lib/constants";
 import {
+  calculateLegacyAdjustmentLine,
+  summarizeLegacyAdjustment,
+} from "@/lib/inventory-adjustment-legacy";
+import {
   Plus,
   X,
   Save,
@@ -213,10 +217,14 @@ export default function InventoryAdjustmentForm() {
 
   function handleActualQtyChange(idx: number, val: number) {
     const updated = [...items];
-    const diff = val - updated[idx].system_quantity;
+    const { difference, totalCost } = calculateLegacyAdjustmentLine(
+      updated[idx].system_quantity,
+      val,
+      updated[idx].unit_cost,
+    );
     updated[idx].actual_quantity = val;
-    updated[idx].difference = diff;
-    updated[idx].total_cost = Math.abs(diff) * updated[idx].unit_cost;
+    updated[idx].difference = difference;
+    updated[idx].total_cost = totalCost;
     setItems(updated);
   }
 
@@ -224,13 +232,12 @@ export default function InventoryAdjustmentForm() {
     setItems(items.filter((_, i) => i !== idx));
   }
 
-  const totalGain = items
-    .filter((i) => i.difference > 0)
-    .reduce((s, i) => s + i.total_cost, 0);
-  const totalLoss = items
-    .filter((i) => i.difference < 0)
-    .reduce((s, i) => s + i.total_cost, 0);
-  const netDifference = totalGain - totalLoss;
+  const {
+    totalGain,
+    totalLoss,
+    netDifference,
+    zeroDifferenceProductCount,
+  } = summarizeLegacyAdjustment(items);
 
   async function handleSave() {
     if (saving) return;
@@ -638,9 +645,7 @@ export default function InventoryAdjustmentForm() {
 
   if (loading) return <PageSkeleton variant="form" />;
 
-  const zeroDiffCount = items.filter(
-    (i) => i.product_id && i.difference === 0,
-  ).length;
+  const zeroDiffCount = zeroDifferenceProductCount;
   const hasZeroDiff = zeroDiffCount > 0;
   function removeZeroDiffItems() {
     setItems((prev) => prev.filter((i) => !i.product_id || i.difference !== 0));
