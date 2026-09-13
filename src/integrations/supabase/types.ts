@@ -2148,6 +2148,17 @@ export type Database = {
         }
         Returns: Json
       }
+      get_inventory_reconciliation_diagnostic: {
+        Args: {
+          p_expected_fingerprint?: string
+          p_limit?: number
+          p_offset?: number
+          p_only_issues?: boolean
+          p_search?: string
+          p_section?: string
+        }
+        Returns: Json
+      }
       get_inventory_valuation: { Args: { p_as_of?: string }; Returns: Json }
       get_journal_summary: {
         Args: { p_date_from?: string; p_date_to?: string }
