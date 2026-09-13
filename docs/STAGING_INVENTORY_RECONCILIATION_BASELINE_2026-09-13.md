@@ -66,3 +66,17 @@
 - لم تُطبق Migration ولم يُنفذ أي تعديل على Staging.
 - لم تُلمس Farida أو Alibea الإنتاجيتان.
 - الخطوة التالية هي تجربة Migration ودالة التشخيص على Staging داخل معاملة تنتهي بـ`ROLLBACK`، قبل أي تطبيق دائم.
+
+## تجربة Migration ذات الرجوع الكامل
+
+اكتملت بعد حفظ النسخة، باستخدام المشغل المقيد `scripts/staging/rehearse-inventory-reconciliation-diagnostic.mjs`:
+
+- تحقق المشغل محلياً أن المشروع المرتبط هو `dunzfxurefzlaamgghys`.
+- أنشأ الدالة وشغّل الملخص وصفحة المنتجات وصفحة المصادر على بيانات Staging الفعلية.
+- طابقت الكمية والقيمة ورصيد `1104` خط الأساس أعلاه، ونجح حاجز الحد الأقصى للصفحات.
+- انتهت المعاملة بـ`ROLLBACK`.
+- أكد استعلام مستقل بعد الرجوع أن الدالة غير موجودة وأن أعداد الجداول ما زالت مطابقة.
+- النتيجة: `STAGING_DIAGNOSTIC_TRANSACTIONAL_REHEARSAL_OK`.
+- الدليل المحمي: `/backups/staging/inventory-reconciliation-before-20260913-192242/diagnostic-transactional-rehearsal`.
+
+بذلك أصبحت Migration متوافقة مع بيانات Staging الحقيقية من دون إبقاء أي تغيير. الخطوة التالية هي التطبيق الدائم على Staging فقط بعد اعتماد صريح، ثم مقارنة ظل للنتائج قبل ربط الواجهة.
