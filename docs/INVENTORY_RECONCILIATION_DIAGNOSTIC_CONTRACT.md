@@ -220,7 +220,7 @@ can_prepare_repair
 كل صف في قسم `sources` يعيد:
 
 ```text
-source_type, source_id, source_number, source_status, source_date
+source_key, source_type, source_id, source_number, source_status, source_date
 journal_entry_id, reversal_journal_entry_id
 movement_count, movement_quantity, movement_book_value
 ledger_1104_value, source_difference
@@ -230,6 +230,8 @@ can_prepare_repair
 ```
 
 تستخدم الإشارة نفسها للطرفين: زيادة أصل المخزون موجبة ونقصه سالب. لا تُجرى مقاصة بين مصادر مختلفة عند التصنيف.
+
+`source_key` مفتاح عرض حتمي: `نوع_المصدر:المعرف` للمصدر المعروف، و`movement:المعرف` للحركة غير المرتبطة، و`journal:المعرف` للقيد غير المرتبط. يمنع ذلك دمج الآثار المجهولة في صف واحد أو ربطها بالتخمين.
 
 ## 11. البصمة ومنع القرار القديم
 
@@ -292,6 +294,10 @@ can_prepare_repair
 14. تغير البيانات بين صفحتين ورفض البصمة القديمة.
 15. رفض وصول البائع ونجاح المدير والمحاسب.
 16. تطابق الملخص مع جمع كل الصفوف بلا تأثير للصفحات أو البحث.
+
+### حالة TDD
+
+بتاريخ 2026-09-13 كُتب عقد SQL للسيناريوهات الستة عشر في `supabase/tests/inventory_reconciliation_diagnostic_contract.sql`، وأضيف مشغل معزول يتحقق من هوية حاوية L3 ومن بقاء بياناتها دون تغيير. نجح وضع `--expect-missing` بالنتيجة `TDD_RED_OK`: الدالة الجديدة غير موجودة كما هو متوقع، ولم تُنفذ بيانات الاختبار ولم تتغير L3 أو Staging المستضافة أو الإنتاج.
 
 ## 16. ترتيب التنفيذ بعد الاعتماد
 
