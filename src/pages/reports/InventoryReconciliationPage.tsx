@@ -8,6 +8,7 @@ import {
   Info,
   RefreshCw,
 } from "lucide-react";
+import { Link } from "react-router-dom";
 import { PageHeader } from "@/components/PageHeader";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -30,8 +31,11 @@ import { supabase } from "@/integrations/supabase/client";
 import { formatDate, formatNumber } from "@/lib/format";
 import {
   inventoryClassificationLabel,
+  formatInventorySourceNumber,
+  getInventorySourcePath,
   inventoryReasonLabel,
   inventoryReconciliationStatusLabel,
+  inventorySourceStatusLabel,
   inventorySourceTypeLabel,
   isReconciliationSnapshotStale,
   parseInventoryReconciliationDiagnostic,
@@ -40,6 +44,7 @@ import {
   type InventoryReconciliationSection,
   type InventoryReconciliationSourceRow,
   type InventoryReconciliationStatus,
+  type InventoryDocumentPrefixes,
 } from "@/lib/inventory-reconciliation-diagnostic";
 import { notify } from "@/lib/notify";
 
@@ -59,16 +64,20 @@ const classificationVariant = (classification: string) =>
       ? "outline"
       : "destructive";
 
-const sourceLabel = (row: InventoryReconciliationSourceRow) => {
+const sourceLabel = (
+  row: InventoryReconciliationSourceRow,
+  prefixes: InventoryDocumentPrefixes,
+) => {
   const type = inventorySourceTypeLabel[row.sourceType] ?? row.sourceType;
-  return row.sourceNumber ? `${type} ${row.sourceNumber}` : `${type} — ${row.sourceKey}`;
+  const number = formatInventorySourceNumber(row, prefixes);
+  return number === type ? type : `${type} ${number}`;
 };
 
 const rowReasons = (reasonCodes: string[]) =>
   reasonCodes.map((reason) => inventoryReasonLabel[reason] ?? reason).join(" • ");
 
 export default function InventoryReconciliationPage() {
-  const { formatCurrency } = useSettings();
+  const { formatCurrency, settings } = useSettings();
   const requestId = useRef(0);
   const fingerprintRef = useRef<string | null>(null);
 
@@ -166,6 +175,13 @@ export default function InventoryReconciliationPage() {
   const pageCount = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
   const totals = diagnostic?.totals;
   const status = diagnostic?.status ?? "unavailable";
+  const sourcePrefixes: InventoryDocumentPrefixes = {
+    salesInvoice: settings?.sales_invoice_prefix || "INV-",
+    purchaseInvoice: settings?.purchase_invoice_prefix || "PUR-",
+    salesReturn: settings?.sales_return_prefix || "SRN-",
+    purchaseReturn: settings?.purchase_return_prefix || "PRN-",
+    journalEntry: settings?.journal_entry_prefix || "JV-",
+  };
 
   useEffect(() => {
     setPageIndex(0);
@@ -303,7 +319,12 @@ export default function InventoryReconciliationPage() {
                 {section === "products" ? (
                   <ProductsTable rows={productRows} formatCurrency={formatCurrency} onlyIssues={onlyIssues} />
                 ) : (
-                  <SourcesTable rows={sourceRows} formatCurrency={formatCurrency} onlyIssues={onlyIssues} />
+                  <SourcesTable
+                    rows={sourceRows}
+                    formatCurrency={formatCurrency}
+                    onlyIssues={onlyIssues}
+                    prefixes={sourcePrefixes}
+                  />
                 )}
               </div>
 
@@ -402,10 +423,12 @@ function SourcesTable({
   rows,
   formatCurrency,
   onlyIssues,
+  prefixes,
 }: {
   rows: InventoryReconciliationSourceRow[];
   formatCurrency: (value: number) => string;
   onlyIssues: boolean;
+  prefixes: InventoryDocumentPrefixes;
 }) {
   if (rows.length === 0) {
     return <EmptyDiagnostic message={onlyIssues ? "لا توجد ملاحظات في روابط المستندات والقيود والحركات." : "لا توجد مصادر ضمن نطاق البحث."} />;
@@ -425,15 +448,24 @@ function SourcesTable({
         </TableRow>
       </TableHeader>
       <TableBody>
-        {rows.map((row) => (
+        {rows.map((row) => {
+          const sourcePath = getInventorySourcePath(row);
+          return (
           <TableRow key={row.sourceKey}>
             <TableCell>
-              <div className="font-medium">{sourceLabel(row)}</div>
-              <div className="font-mono text-xs text-muted-foreground">{row.sourceKey}</div>
+              {sourcePath ? (
+                <Link to={sourcePath} className="font-medium text-primary underline-offset-4 hover:underline">
+                  {sourceLabel(row, prefixes)}
+                </Link>
+              ) : (
+                <div className="font-medium">{sourceLabel(row, prefixes)}</div>
+              )}
             </TableCell>
             <TableCell>
               <div>{formatDate(row.sourceDate)}</div>
-              <div className="text-xs text-muted-foreground">{row.sourceStatus ?? "—"}</div>
+              <div className="text-xs text-muted-foreground">
+                {row.sourceStatus ? inventorySourceStatusLabel[row.sourceStatus] ?? row.sourceStatus : "—"}
+              </div>
             </TableCell>
             <TableCell className="text-center">
               <div>{row.movementCount.toLocaleString("en-US")}</div>
@@ -453,7 +485,8 @@ function SourcesTable({
               {row.reasonCodes.length > 0 && <div className="mt-1 max-w-xs text-xs text-muted-foreground">{rowReasons(row.reasonCodes)}</div>}
             </TableCell>
           </TableRow>
-        ))}
+          );
+        })}
       </TableBody>
     </Table>
   );

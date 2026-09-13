@@ -307,6 +307,66 @@ export const inventoryReasonLabel: Record<string, string> = {
   unlinked_reversal: "قيد عكس غير مرتبط",
 };
 
+export interface InventoryDocumentPrefixes {
+  salesInvoice: string;
+  purchaseInvoice: string;
+  salesReturn: string;
+  purchaseReturn: string;
+  journalEntry: string;
+}
+
+const defaultPrefixes: InventoryDocumentPrefixes = {
+  salesInvoice: "INV-",
+  purchaseInvoice: "PUR-",
+  salesReturn: "SRN-",
+  purchaseReturn: "PRN-",
+  journalEntry: "JV-",
+};
+
+export function formatInventorySourceNumber(
+  row: InventoryReconciliationSourceRow,
+  prefixes: Partial<InventoryDocumentPrefixes> = {},
+): string {
+  const resolved = { ...defaultPrefixes, ...prefixes };
+  const prefixByType: Record<string, string> = {
+    sales_invoice: resolved.salesInvoice,
+    purchase_invoice: resolved.purchaseInvoice,
+    sales_return: resolved.salesReturn,
+    purchase_return: resolved.purchaseReturn,
+    journal: resolved.journalEntry,
+  };
+  const prefix = prefixByType[row.sourceType];
+  if (!row.sourceNumber) return inventorySourceTypeLabel[row.sourceType] ?? row.sourceType;
+  if (!prefix) return row.sourceNumber;
+
+  const numericNumber = Number(row.sourceNumber);
+  return Number.isInteger(numericNumber) && numericNumber >= 0
+    ? `${prefix}${String(numericNumber).padStart(4, "0")}`
+    : `${prefix}${row.sourceNumber}`;
+}
+
+export function getInventorySourcePath(row: InventoryReconciliationSourceRow): string | null {
+  const pathByType: Record<string, string> = {
+    sales_invoice: "/sales",
+    purchase_invoice: "/purchases",
+    sales_return: "/sales-returns",
+    purchase_return: "/purchase-returns",
+    adjustment: "/inventory-adjustments",
+    inventory_adjustment: "/inventory-adjustments",
+    staging_seed: "/journal",
+    journal: "/journal",
+  };
+  const basePath = pathByType[row.sourceType];
+  return basePath ? `${basePath}/${encodeURIComponent(row.sourceId)}` : null;
+}
+
+export const inventorySourceStatusLabel: Record<string, string> = {
+  posted: "مرحّل",
+  draft: "مسودة",
+  cancelled: "ملغي",
+  unresolved: "غير مرتبط",
+};
+
 export function isReconciliationSnapshotStale(error: unknown): boolean {
   if (!isRecord(error)) return false;
   return (
