@@ -102,7 +102,7 @@ $$;
 DO $fixture$
 DECLARE
   v_product uuid; v_matched uuid; v_idempotent uuid;
-  v_duplicate uuid; v_parallel uuid;
+  v_duplicate uuid; v_parallel uuid; v_cancel uuid;
 BEGIN
   INSERT INTO public.products(code, name, purchase_price, selling_price, quantity_on_hand, is_active)
   VALUES ('__REPAIR_2B_MISMATCH', 'Repair lifecycle mismatch', 10, 15, 5, true)
@@ -128,12 +128,19 @@ BEGIN
   VALUES ('__REPAIR_2B_PARALLEL', 'Repair lifecycle parallel', 10, 15, 6, true)
   RETURNING id INTO v_parallel;
   INSERT INTO repair_contract_ids(name, id) VALUES ('parallel_product', v_parallel);
+
+  INSERT INTO public.products(code, name, purchase_price, selling_price, quantity_on_hand, is_active)
+  VALUES ('__REPAIR_2B_CANCEL', 'Repair lifecycle cancel', 10, 15, 7, true)
+  RETURNING id INTO v_cancel;
+  INSERT INTO repair_contract_ids(name, id) VALUES ('cancel_product', v_cancel);
 END;
 $fixture$;
 
--- Scenario 01: البائع مرفوض من إنشاء عملية معالجة.
+-- Scenario 01: البائع وanon مرفوضان من إنشاء عملية معالجة.
 DO $scenario_01$
-DECLARE v_product uuid; v_fingerprint text; v_rejected boolean := false;
+DECLARE
+  v_product uuid; v_fingerprint text;
+  v_seller_rejected boolean := false; v_anon_rejected boolean := false;
 BEGIN
   SELECT id INTO v_product FROM repair_contract_ids WHERE name = 'mismatch_product';
   PERFORM pg_temp.set_repair_actor('accountant');
@@ -144,9 +151,18 @@ BEGIN
     PERFORM public.create_inventory_reconciliation_repair(
       'رفض البائع', 'اختبار صلاحية البائع', v_fingerprint, statement_timestamp(),
       'all_recorded_stock_effects', jsonb_build_array(pg_temp.product_item(v_product)), gen_random_uuid());
-  EXCEPTION WHEN insufficient_privilege THEN v_rejected := true;
+  EXCEPTION WHEN insufficient_privilege THEN v_seller_rejected := true;
   END;
-  IF NOT v_rejected THEN RAISE EXCEPTION 'البائع استطاع إنشاء معالجة'; END IF;
+  IF NOT v_seller_rejected THEN RAISE EXCEPTION 'البائع استطاع إنشاء معالجة'; END IF;
+
+  PERFORM set_config('request.jwt.claims', '{"role":"anon"}', true);
+  BEGIN
+    PERFORM public.create_inventory_reconciliation_repair(
+      'رفض anon', 'اختبار صلاحية الزائر', v_fingerprint, statement_timestamp(),
+      'all_recorded_stock_effects', jsonb_build_array(pg_temp.product_item(v_product)), gen_random_uuid());
+  EXCEPTION WHEN insufficient_privilege THEN v_anon_rejected := true;
+  END;
+  IF NOT v_anon_rejected THEN RAISE EXCEPTION 'anon استطاع إنشاء معالجة'; END IF;
 END;
 $scenario_01$;
 
@@ -416,7 +432,7 @@ $scenario_14$;
 DO $scenario_15$
 DECLARE v_product uuid; v_fingerprint text; v_created jsonb; v_result jsonb; v_repair uuid;
 BEGIN
-  SELECT id INTO v_product FROM repair_contract_ids WHERE name = 'mismatch_product';
+  SELECT id INTO v_product FROM repair_contract_ids WHERE name = 'cancel_product';
   PERFORM pg_temp.set_repair_actor('accountant');
   SELECT public.get_inventory_reconciliation_diagnostic('summary', true, NULL, 100, 0, NULL)->>'fingerprint'
   INTO v_fingerprint;
@@ -433,9 +449,9 @@ BEGIN
 END;
 $scenario_15$;
 
--- Scenario 16: RLS والمنح تمنع DML المباشر وتبقى جداول الأعمال بلا آثار إصلاح.
+-- Scenario 16: RLS والمنح وخصائص الدوال آمنة وتبقى جداول الأعمال بلا آثار إصلاح.
 DO $scenario_16$
-DECLARE v_table text;
+DECLARE v_table text; v_signature text;
 BEGIN
   FOREACH v_table IN ARRAY ARRAY[
     'inventory_reconciliation_repairs', 'inventory_reconciliation_repair_items',
@@ -448,6 +464,30 @@ BEGIN
        OR has_table_privilege('authenticated', 'public.' || v_table, 'UPDATE')
        OR has_table_privilege('authenticated', 'public.' || v_table, 'DELETE') THEN
       RAISE EXCEPTION 'يوجد DML مباشر غير مسموح على %', v_table;
+    END IF;
+    IF NOT has_table_privilege('authenticated', 'public.' || v_table, 'SELECT') THEN
+      RAISE EXCEPTION 'صلاحية القراءة المالية مفقودة على %', v_table;
+    END IF;
+  END LOOP;
+  FOREACH v_signature IN ARRAY ARRAY[
+    'public.create_inventory_reconciliation_repair(text,text,text,timestamptz,text,jsonb,uuid)',
+    'public.update_inventory_reconciliation_repair(uuid,text,text,jsonb,integer,uuid)',
+    'public.submit_inventory_reconciliation_repair(uuid,integer,uuid)',
+    'public.approve_inventory_reconciliation_repair(uuid,integer,text,uuid)',
+    'public.cancel_inventory_reconciliation_repair(uuid,text,integer,uuid)',
+    'public.execute_inventory_reconciliation_repair(uuid,integer,uuid)'
+  ] LOOP
+    IF has_function_privilege('anon', v_signature, 'EXECUTE')
+       OR NOT has_function_privilege('authenticated', v_signature, 'EXECUTE') THEN
+      RAISE EXCEPTION 'منح تنفيذ RPC غير صحيحة على %', v_signature;
+    END IF;
+    IF NOT EXISTS (
+      SELECT 1 FROM pg_proc p
+      WHERE p.oid = to_regprocedure(v_signature)
+        AND p.prosecdef
+        AND COALESCE(array_to_string(p.proconfig, ','), '') LIKE '%search_path=public, pg_temp%'
+    ) THEN
+      RAISE EXCEPTION 'SECURITY DEFINER أو search_path غير آمن على %', v_signature;
     END IF;
   END LOOP;
   IF EXISTS (SELECT 1 FROM public.inventory_reconciliation_repair_effects) THEN
