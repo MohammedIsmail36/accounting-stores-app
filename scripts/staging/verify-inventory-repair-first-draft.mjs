@@ -26,6 +26,7 @@ export function validateFirstDraftVerifierSource(source) {
     "--after-create",
     "--after-edit",
     "--after-submit",
+    "--after-approve",
   ]) {
     if (!source.includes(required)) throw new Error(`حاجز تحقق المسودة مفقود: ${required}`);
   }
@@ -49,8 +50,8 @@ function runCli(filePath, logPath) {
     maxBuffer: 32 * 1024 * 1024,
   });
   const output = `${result.stdout ?? ""}\n${result.stderr ?? ""}`;
+  writeFileSync(logPath, output, { mode: 0o600 });
   if (result.status !== 0 || result.error || /"error"\s*:/.test(result.stdout ?? "")) {
-    writeFileSync(logPath, output, { mode: 0o600 });
     throw new Error(`فشل تحقق أول مسودة؛ التشخيص المحمي: ${logPath}`);
   }
   return JSON.parse(result.stdout);
@@ -58,16 +59,18 @@ function runCli(filePath, logPath) {
 
 function main() {
   const mode = process.argv[2];
-  if (process.argv.length !== 3 || !["--after-create", "--after-edit", "--after-submit"].includes(mode)) {
-    throw new Error("استخدم --after-create أو --after-edit أو --after-submit");
+  if (process.argv.length !== 3 || !["--after-create", "--after-edit", "--after-submit", "--after-approve"].includes(mode)) {
+    throw new Error("استخدم --after-create أو --after-edit أو --after-submit أو --after-approve");
   }
   const afterEdit = mode === "--after-edit";
   const afterSubmit = mode === "--after-submit";
-  const expectedVersion = afterSubmit ? 3 : afterEdit ? 2 : 1;
-  const expectedEvents = afterSubmit ? 3 : afterEdit ? 2 : 1;
-  const expectedUpdatedEvents = afterEdit || afterSubmit ? 1 : 0;
-  const expectedSubmittedEvents = afterSubmit ? 1 : 0;
-  const expectedStatus = afterSubmit ? "ready_for_review" : "draft";
+  const afterApprove = mode === "--after-approve";
+  const expectedVersion = afterApprove ? 4 : afterSubmit ? 3 : afterEdit ? 2 : 1;
+  const expectedEvents = afterApprove ? 4 : afterSubmit ? 3 : afterEdit ? 2 : 1;
+  const expectedUpdatedEvents = afterEdit || afterSubmit || afterApprove ? 1 : 0;
+  const expectedSubmittedEvents = afterSubmit || afterApprove ? 1 : 0;
+  const expectedApprovedEvents = afterApprove ? 1 : 0;
+  const expectedStatus = afterApprove ? "approved" : afterSubmit ? "ready_for_review" : "draft";
   validateFirstDraftVerifierSource(readFileSync(fileURLToPath(import.meta.url), "utf8"));
   const linkedRef = readFileSync(projectRefPath, "utf8").trim();
   if (linkedRef !== expectedProjectRef) {
@@ -81,7 +84,7 @@ function main() {
     throw new Error("بصمة خط الأساس لا تطابق النسخة المحفوظة");
   }
 
-  const reportDir = mkdtempSync(`/tmp/accounting-staging-inventory-repair-${afterSubmit ? "submitted" : afterEdit ? "edited" : "first"}-draft-`);
+  const reportDir = mkdtempSync(`/tmp/accounting-staging-inventory-repair-${afterApprove ? "approved" : afterSubmit ? "submitted" : afterEdit ? "edited" : "first"}-draft-`);
   const sqlPath = join(reportDir, "verification.sql");
   const logPath = join(reportDir, "run.log");
   const reportPath = join(reportDir, "report.json");
@@ -106,6 +109,35 @@ SELECT jsonb_build_object(
       'created_events', (SELECT count(*) FROM public.inventory_reconciliation_repair_events e WHERE e.repair_id = r.id AND e.event_type = 'created'),
       'updated_events', (SELECT count(*) FROM public.inventory_reconciliation_repair_events e WHERE e.repair_id = r.id AND e.event_type = 'updated'),
       'submitted_events', (SELECT count(*) FROM public.inventory_reconciliation_repair_events e WHERE e.repair_id = r.id AND e.event_type = 'submitted'),
+      'approved_events', (SELECT count(*) FROM public.inventory_reconciliation_repair_events e WHERE e.repair_id = r.id AND e.event_type = 'approved'),
+      'prepared_by', r.prepared_by,
+      'submitted_at', r.submitted_at,
+      'approved_by', r.approved_by,
+      'approved_at', r.approved_at,
+      'separation_override_reason', r.separation_override_reason,
+      'purchase_invoice_business_changes_since_submission', (
+        SELECT count(*) FROM public.audit_log a
+        WHERE a.table_name = 'purchase_invoices'
+          AND a.created_at > r.submitted_at
+          AND (COALESCE(a.old_data, '{}'::jsonb) - 'updated_at')
+            IS DISTINCT FROM (COALESCE(a.new_data, '{}'::jsonb) - 'updated_at')
+      ),
+      'purchase_invoice_metadata_updates_since_submission', (
+        SELECT count(*) FROM public.audit_log a
+        WHERE a.table_name = 'purchase_invoices'
+          AND a.created_at > r.submitted_at
+          AND (COALESCE(a.old_data, '{}'::jsonb) - 'updated_at')
+            IS NOT DISTINCT FROM (COALESCE(a.new_data, '{}'::jsonb) - 'updated_at')
+          AND a.old_data->'updated_at' IS DISTINCT FROM a.new_data->'updated_at'
+      ),
+      'purchase_invoice_first_metadata_update_at', (
+        SELECT min(a.created_at) FROM public.audit_log a
+        WHERE a.table_name = 'purchase_invoices'
+          AND a.created_at > r.submitted_at
+          AND (COALESCE(a.old_data, '{}'::jsonb) - 'updated_at')
+            IS NOT DISTINCT FROM (COALESCE(a.new_data, '{}'::jsonb) - 'updated_at')
+          AND a.old_data->'updated_at' IS DISTINCT FROM a.new_data->'updated_at'
+      ),
       'effects', (SELECT count(*) FROM public.inventory_reconciliation_repair_effects x WHERE x.repair_id = r.id),
       'item', (SELECT jsonb_build_object(
         'axis', i.axis,
@@ -156,16 +188,31 @@ ROLLBACK;
       || repair?.repair_number !== 1 || repair?.status !== expectedStatus || repair?.version !== expectedVersion
       || repair?.item_count !== 1 || repair?.created_events !== 1
       || repair?.updated_events !== expectedUpdatedEvents || repair?.submitted_events !== expectedSubmittedEvents
+      || repair?.approved_events !== expectedApprovedEvents
       || repair?.effects !== 0
       || item?.axis !== "source" || item?.classification !== "rounding"
       || item?.repair_type !== "post_rounding_adjustment" || item?.source_type !== "purchase_invoice"
       || item?.source_number !== "24" || item?.result_status !== "pending") {
     throw new Error(`دورة أول مسودة أو بندها لا تطابق العقد؛ التشخيص المحمي: ${logPath}`);
   }
-  if (JSON.stringify(verification.counts) !== JSON.stringify(baseline.counts)
-      || JSON.stringify(verification.signatures) !== JSON.stringify(baseline.signatures)
-      || verification.diagnostic.fingerprint !== baseline.diagnostic.fingerprint
-      || verification.diagnostic.status !== baseline.diagnostic.status) {
+  if (afterApprove && (!repair.approved_by || !repair.approved_at
+      || (repair.prepared_by === repair.approved_by && !repair.separation_override_reason?.trim()))) {
+    throw new Error(`بيانات اعتماد المعالجة أو توثيق عدم فصل المهام غير مكتملة؛ التشخيص المحمي: ${logPath}`);
+  }
+  const countsPreserved = JSON.stringify(verification.counts) === JSON.stringify(baseline.counts);
+  const signatureDiffs = Object.keys(verification.signatures)
+    .filter((key) => verification.signatures[key] !== baseline.signatures[key]);
+  const rawBusinessSignaturesPreserved = signatureDiffs.length === 0;
+  const metadataOnlyPurchaseChange = afterApprove
+    && signatureDiffs.length === 1
+    && signatureDiffs[0] === "purchase_invoices"
+    && repair.purchase_invoice_business_changes_since_submission === 0
+    && repair.purchase_invoice_metadata_updates_since_submission > 0
+    && Date.parse(repair.purchase_invoice_first_metadata_update_at) > Date.parse(repair.approved_at);
+  const diagnosticPreserved = verification.diagnostic.fingerprint === baseline.diagnostic.fingerprint
+    && verification.diagnostic.status === baseline.diagnostic.status;
+  if (!countsPreserved || (!rawBusinessSignaturesPreserved && !metadataOnlyPurchaseChange)
+      || !diagnosticPreserved) {
     throw new Error(`تغيرت بيانات الأعمال أو التشخيص عن خط الأساس؛ التشخيص المحمي: ${logPath}`);
   }
 
@@ -178,12 +225,17 @@ ROLLBACK;
     repair: repair,
     repairRegistryOnly: true,
     businessBaselinePreserved: true,
-    diagnosticPreserved: true,
+    rawBusinessSignaturesPreserved,
+    acceptedMetadataOnlySignatureDiffs: metadataOnlyPurchaseChange ? signatureDiffs : [],
+    diagnosticPreserved,
     productionModified: false,
   };
   writeFileSync(reportPath, `${JSON.stringify(report, null, 2)}\n`, { mode: 0o600 });
-  console.log(`نجح تحقق ${afterSubmit ? "إرسال" : afterEdit ? "تعديل" : "إنشاء"} المسودة على Staging`);
+  console.log(`نجح تحقق ${afterApprove ? "اعتماد" : afterSubmit ? "إرسال" : afterEdit ? "تعديل" : "إنشاء"} المسودة على Staging`);
   console.log(`IR-0001: إصدار ${expectedVersion}، بند واحد، ${expectedEvents} حدث، وصفر آثار تنفيذ`);
+  if (metadataOnlyPurchaseChange) {
+    console.log("تغير توقيت تحديث فاتورة الشراء فقط في معاملة منفصلة بعد الاعتماد؛ المحتوى المالي لم يتغير");
+  }
   console.log("بيانات الأعمال والتشخيص مطابقان لخط الأساس؛ لم يحدث إصلاح أو ترحيل");
   console.log(`REPORT_DIR=${reportDir}`);
 }

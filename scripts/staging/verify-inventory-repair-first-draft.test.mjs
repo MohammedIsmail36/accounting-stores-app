@@ -14,8 +14,14 @@ test("first-draft verifier is read-only, staging-bound, and baseline-aware", () 
   assert.match(source, /--after-create/);
   assert.match(source, /--after-edit/);
   assert.match(source, /--after-submit/);
+  assert.match(source, /--after-approve/);
   assert.match(source, /submitted_events/);
+  assert.match(source, /approved_events/);
   assert.match(source, /ready_for_review/);
+  assert.match(source, /separation_override_reason/);
+  assert.match(source, /purchase_invoice_business_changes_since_submission/);
+  assert.match(source, /metadataOnlyPurchaseChange/);
+  assert.match(source, /rawBusinessSignaturesPreserved/);
   assert.match(source, /updated_events/);
   assert.match(source, /businessBaselinePreserved: true/);
   assert.doesNotMatch(source, /INSERT INTO|UPDATE public\.|DELETE FROM/);
