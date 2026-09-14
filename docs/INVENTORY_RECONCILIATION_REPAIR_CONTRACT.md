@@ -390,4 +390,10 @@ TDD_REPAIR_LIFECYCLE_RED_OK
 /backups/staging/inventory-repair-before-20260914-081004/repair-lifecycle-transactional-rehearsal
 ```
 
-الخطوة التالية هي مراجعة واعتماد التطبيق الدائم لـMigration ‏2B على Staging فقط. لا تبدأ واجهة سجل المعالجة ولا المرحلة 2C قبل التحقق اللاحق للتطبيق وقبول المستخدم.
+قبل التطبيق الدائم أُنشئ ملف رجوع صريح مقيد برمز Staging ويرفض العمل إذا وُجد أي سجل معالجة. اختُبر داخل L3، فأزال الدوال والجداول دون `CASCADE` مع بقاء بيانات الأعمال كما هي. حُفظ الدليل في:
+
+```text
+/backups/staging/inventory-repair-before-20260914-081004/repair-lifecycle-explicit-rollback-rehearsal
+```
+
+أكد `dry-run` الرسمي أن `20260913234500_inventory_reconciliation_repair_lifecycle.sql` هو الترحيل الوحيد المنتظر، دون seeds أو roles. الخطوة التالية هي مراجعة واعتماد التطبيق الدائم لـMigration ‏2B على Staging فقط. لا تبدأ واجهة سجل المعالجة ولا المرحلة 2C قبل التحقق اللاحق للتطبيق وقبول المستخدم.

@@ -10,6 +10,7 @@ const root = fileURLToPath(new URL("../../", import.meta.url));
 const sqlPath = join(root, "supabase/tests/inventory_reconciliation_repair_lifecycle_contract.sql");
 const diagnosticMigrationPath = join(root, "supabase/migrations/20260913160000_inventory_reconciliation_diagnostic.sql");
 const migrationPath = join(root, "supabase/migrations/20260913234500_inventory_reconciliation_repair_lifecycle.sql");
+const rollbackPath = join(root, "supabase/rollback/20260913234500_inventory_reconciliation_repair_lifecycle.sql");
 const marker = "INVENTORY_RECONCILIATION_REPAIR_LIFECYCLE_CONTRACT_OK";
 
 export const requiredRepairTables = [
@@ -83,6 +84,29 @@ export function validateRepairLifecycleMigrationSql(sql) {
   }
 }
 
+export function validateRepairLifecycleRollbackSql(sql) {
+  for (const required of [
+    "STAGING_20260913234500",
+    "INVENTORY_REPAIR_ROLLBACK_NOT_AUTHORIZED",
+    "INVENTORY_REPAIR_ROLLBACK_HAS_RECORDS",
+    ...requiredRepairTables.map((name) => `DROP TABLE public.${name}`),
+    ...requiredRepairFunctions.map((signature) => `DROP FUNCTION ${signature.split("(")[0]}(`),
+  ]) {
+    if (!sql.includes(required)) throw new Error(`جزء مفقود من ملف رجوع 2B: ${required}`);
+  }
+  for (const pattern of [
+    /\bCOMMIT\b/i,
+    /\bCASCADE\b/i,
+    /\bTRUNCATE\b/i,
+    /\b(?:INSERT\s+INTO|UPDATE|DELETE\s+FROM)\s+public\.(?:products|inventory_movements|journal_entries|journal_entry_lines)\b/i,
+    /(?:farida|alibea)-db/i,
+    /https?:\/\//i,
+    /\\connect\b/i,
+  ]) {
+    if (pattern.test(sql)) throw new Error(`عبارة غير مسموحة في ملف رجوع 2B: ${pattern}`);
+  }
+}
+
 function runDocker(args, input) {
   const result = spawnSync("docker", args, {
     input,
@@ -108,16 +132,19 @@ function psql(query) {
 
 function main() {
   const mode = process.argv[2] ?? "--check";
-  if (!["--check", "--expect-missing", "--run-migration"].includes(mode) || process.argv.length > 3) {
-    throw new Error("استخدم --check أو --expect-missing أو --run-migration");
+  if (!["--check", "--expect-missing", "--run-migration", "--test-explicit-rollback"].includes(mode)
+      || process.argv.length > 3) {
+    throw new Error("استخدم --check أو --expect-missing أو --run-migration أو --test-explicit-rollback");
   }
 
   const sql = readFileSync(sqlPath, "utf8");
   const diagnosticMigration = readFileSync(diagnosticMigrationPath, "utf8");
   const migration = readFileSync(migrationPath, "utf8");
+  const rollback = readFileSync(rollbackPath, "utf8");
   validateRepairLifecycleContractSql(sql);
   validateDiagnosticMigrationSql(diagnosticMigration);
   validateRepairLifecycleMigrationSql(migration);
+  validateRepairLifecycleRollbackSql(rollback);
   if (mode === "--check") {
     console.log("تم التحقق من عقد دورة المعالج وMigration؛ لم يُنفذ SQL");
     return;
@@ -164,6 +191,62 @@ function main() {
       md5(COALESCE(string_agg(to_jsonb(a)::text, '|' ORDER BY a.id), ''))) FROM public.audit_log a)
   );`;
   const before = psql(businessStateSql);
+  if (mode === "--test-explicit-rollback") {
+    const absenceSql = `DO $verify$
+    DECLARE v_name text;
+    BEGIN
+      FOREACH v_name IN ARRAY ARRAY[${requiredRepairTables.map((name) => `'${name}'`).join(", ")}]
+      LOOP
+        IF to_regclass('public.' || v_name) IS NOT NULL THEN
+          RAISE EXCEPTION 'ROLLBACK_TABLE_REMAINED: %', v_name;
+        END IF;
+      END LOOP;
+      FOREACH v_name IN ARRAY ARRAY[${requiredRepairFunctions.map((signature) => `'${signature}'`).join(", ")}]
+      LOOP
+        IF to_regprocedure(v_name) IS NOT NULL THEN
+          RAISE EXCEPTION 'ROLLBACK_FUNCTION_REMAINED: %', v_name;
+        END IF;
+      END LOOP;
+    END;
+    $verify$;
+    SELECT 'INVENTORY_REPAIR_EXPLICIT_ROLLBACK_OK';`;
+    let rollbackOutput;
+    try {
+      rollbackOutput = psql(`\\set ON_ERROR_STOP on
+BEGIN;
+${diagnosticMigration}
+${migration}
+SELECT set_config('app.inventory_repair_rollback_authorized', 'STAGING_20260913234500', true);
+${rollback}
+${absenceSql}
+ROLLBACK;`);
+    } catch (error) {
+      writeFileSync(logPath, `${error.message}\n`, { mode: 0o600 });
+      throw new Error(`فشل اختبار ملف رجوع 2B؛ التشخيص المحمي: ${logPath}`);
+    }
+    const afterRollback = psql(businessStateSql);
+    if (!rollbackOutput.includes("INVENTORY_REPAIR_EXPLICIT_ROLLBACK_OK")) {
+      throw new Error("لم تظهر علامة نجاح ملف الرجوع الصريح");
+    }
+    if (before !== afterRollback) throw new Error("تغيرت بيانات أعمال L3 بعد اختبار ملف الرجوع");
+    const reportPath = join(reportDir, "report.json");
+    writeFileSync(reportPath, `${JSON.stringify({
+      status: "INVENTORY_REPAIR_EXPLICIT_ROLLBACK_OK",
+      verifiedAt: new Date().toISOString(),
+      container,
+      database,
+      migration: migrationPath,
+      rollback: rollbackPath,
+      explicitRollbackSucceeded: true,
+      outerTransactionRolledBack: true,
+      isolatedBusinessStatePreserved: true,
+      productionOrHostedStagingModified: false,
+    }, null, 2)}\n`, { mode: 0o600 });
+    console.log("نجح اختبار ملف رجوع 2B الصريح داخل L3 المعزولة");
+    console.log("أزيلت مكونات المعالج دون CASCADE وبقيت بيانات الأعمال كما هي");
+    console.log(`التقرير: ${reportPath}`);
+    return;
+  }
   const contractBody = sql
     .replace(/^\\set ON_ERROR_STOP on\s*/m, "")
     .replace(/^BEGIN;\s*/m, "");
