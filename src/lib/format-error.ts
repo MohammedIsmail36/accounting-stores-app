@@ -21,7 +21,23 @@ const KNOWN_PATTERNS: Array<{ test: RegExp; ar: (m: RegExpMatchArray) => string 
   },
   {
     test: /REPAIR_ACCESS_DENIED/i,
-    ar: () => "ليس لديك صلاحية لإعداد معالجة مخزون.",
+    ar: () => "ليس لديك صلاحية لإدارة معالجة مخزون.",
+  },
+  {
+    test: /REPAIR_VERSION_CONFLICT/i,
+    ar: () => "تغيرت المسودة منذ فتحها. حدّث الصفحة ثم أعد التعديل.",
+  },
+  {
+    test: /REPAIR_STATUS_INVALID/i,
+    ar: () => "لم تعد المعالجة في حالة مسودة، لذلك لا يمكن تعديلها.",
+  },
+  {
+    test: /REPAIR_NOT_FOUND/i,
+    ar: () => "لم تعد مسودة المعالجة موجودة أو لا تملك صلاحية قراءتها.",
+  },
+  {
+    test: /REPAIR_REQUEST_CONFLICT/i,
+    ar: () => "تعذر تأكيد طلب التعديل بأمان. أغلق النافذة ثم أعد المحاولة.",
   },
   {
     test: /REPAIR_(INVALID_HEADER|ITEMS_REQUIRED|TYPE_INVALID_FOR_ISSUE)/i,

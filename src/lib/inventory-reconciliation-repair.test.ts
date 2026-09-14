@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildInventoryRepairDraftItem,
+  buildInventoryRepairUpdateItem,
   getInventoryRepairItemPath,
   inventoryRepairNumber,
   inventoryRepairItemLabel,
@@ -120,5 +121,43 @@ describe("inventory reconciliation repair presentation", () => {
       status: "draft",
       version: 1,
     })).toEqual({ id: validRow.id, repairNumber: 1, status: "draft", version: 1 });
+  });
+
+  it("تعيد تجهيز بند المصدر الحالي لتعديل المسودة دون تغيير هويته", () => {
+    const item = parseInventoryRepairItem({
+      id: validRow.id,
+      line_number: 1,
+      axis: "source",
+      issue_key: `purchase_invoice:${validRow.id}`,
+      classification: "rounding",
+      repair_type: "post_rounding_adjustment",
+      product_id: null,
+      source_type: "purchase_invoice",
+      source_id: validRow.id,
+      source_number: "24",
+      original_journal_entry_id: null,
+      before_card_quantity: null,
+      before_movement_quantity: 109,
+      before_movement_book_value: 20759.99,
+      before_ledger_1104_value: 20760,
+      proposed_card_quantity: null,
+      proposed_movement_book_value: null,
+      proposed_ledger_1104_value: null,
+      result_status: "pending",
+      result_message: null,
+      before_state: {},
+      proposed_state: {},
+    });
+    expect(buildInventoryRepairUpdateItem(item)).toEqual({
+      axis: "source",
+      issue_key: `purchase_invoice:${validRow.id}`,
+      classification: "rounding",
+      repair_type: "post_rounding_adjustment",
+      source_type: "purchase_invoice",
+      source_id: validRow.id,
+      proposed_movement_book_value: null,
+      proposed_ledger_1104_value: null,
+      proposed_state: {},
+    });
   });
 });

@@ -1,8 +1,10 @@
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { AlertCircle, ArrowRight, ClipboardCheck, FileClock, Info, Layers3 } from "lucide-react";
+import { AlertCircle, ArrowRight, ClipboardCheck, FileClock, Info, Layers3, Pencil } from "lucide-react";
 import { Link, useParams } from "react-router-dom";
 import { EmptyState } from "@/components/EmptyState";
 import { PageHeader } from "@/components/PageHeader";
+import { EditInventoryRepairDraftDialog } from "@/components/inventory-reconciliation/EditInventoryRepairDraftDialog";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -38,6 +40,7 @@ const shortId = (value: string) => `${value.slice(0, 8)}…`;
 export default function InventoryReconciliationRepairDetailPage() {
   const { id = "" } = useParams();
   const { formatCurrency } = useSettings();
+  const [editOpen, setEditOpen] = useState(false);
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["inventory-reconciliation-repair", id],
@@ -102,13 +105,28 @@ export default function InventoryReconciliationRepairDetailPage() {
           </Badge>
         )}
         actions={(
-          <Button asChild variant="outline">
-            <Link to="/reports/inventory-reconciliation/repairs">
-              <ArrowRight className="ml-2 h-4 w-4" />
-              العودة إلى السجل
-            </Link>
-          </Button>
+          <>
+            {repair.status === "draft" && (
+              <Button onClick={() => setEditOpen(true)}>
+                <Pencil className="ml-2 h-4 w-4" />
+                تعديل المسودة
+              </Button>
+            )}
+            <Button asChild variant="outline">
+              <Link to="/reports/inventory-reconciliation/repairs">
+                <ArrowRight className="ml-2 h-4 w-4" />
+                العودة إلى السجل
+              </Link>
+            </Button>
+          </>
         )}
+      />
+
+      <EditInventoryRepairDraftDialog
+        open={editOpen}
+        onOpenChange={setEditOpen}
+        repair={repair}
+        items={items}
       />
 
       <Alert className="border-amber-200 bg-amber-50/60 dark:border-amber-900 dark:bg-amber-950/20">

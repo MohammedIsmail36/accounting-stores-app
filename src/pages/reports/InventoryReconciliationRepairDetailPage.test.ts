@@ -20,4 +20,10 @@ describe("InventoryReconciliationRepairDetailPage boundary", () => {
     expect(source).not.toContain(".update(");
     expect(source).not.toContain(".delete(");
   });
+
+  it("تعرض تعديل المسودة من مكون مستقل للمسودة فقط", () => {
+    expect(source).toContain("EditInventoryRepairDraftDialog");
+    expect(source).toContain('repair.status === "draft"');
+    expect(source).toContain("تعديل المسودة");
+  });
 });

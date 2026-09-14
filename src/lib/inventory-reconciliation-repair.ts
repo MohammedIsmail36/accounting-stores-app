@@ -300,6 +300,35 @@ export function getInventoryRepairItemPath(item: InventoryRepairItem) {
   return base ? `${base}/${item.sourceId}` : null;
 }
 
+export function buildInventoryRepairUpdateItem(item: InventoryRepairItem) {
+  const common = {
+    axis: item.axis,
+    issue_key: item.issueKey,
+    classification: item.classification,
+    repair_type: item.repairType,
+    proposed_state: item.proposedState,
+  };
+
+  if (item.axis === "product") {
+    if (!item.productId) throw new Error("بيانات منتج المعالجة غير مكتملة");
+    return {
+      ...common,
+      product_id: item.productId,
+    };
+  }
+
+  if (!item.sourceType || !item.sourceId) {
+    throw new Error("بيانات مصدر المعالجة غير مكتملة");
+  }
+  return {
+    ...common,
+    source_type: item.sourceType,
+    source_id: item.sourceId,
+    proposed_movement_book_value: item.proposedMovementBookValue,
+    proposed_ledger_1104_value: item.proposedLedger1104Value,
+  };
+}
+
 export interface InventoryRepairDraftDiagnosticRow {
   kind: "product" | "source";
   classification: string;
@@ -358,7 +387,7 @@ export function parseInventoryRepairCommandResult(value: unknown) {
   const version = Number(row.version);
   const status = row.status as InventoryRepairStatus;
   if (!Number.isSafeInteger(repairNumber) || !Number.isSafeInteger(version) || !inventoryRepairStatusLabel[status]) {
-    throw new Error("استجابة إنشاء مسودة المعالجة غير صالحة");
+    throw new Error("استجابة أمر معالجة المخزون غير صالحة");
   }
   return {
     id: requiredText(row.id),
