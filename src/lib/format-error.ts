@@ -25,7 +25,7 @@ const KNOWN_PATTERNS: Array<{ test: RegExp; ar: (m: RegExpMatchArray) => string 
   },
   {
     test: /REPAIR_VERSION_CONFLICT/i,
-    ar: () => "تغيرت المسودة منذ فتحها. حدّث الصفحة ثم أعد التعديل.",
+    ar: () => "تغيرت المعالجة منذ فتحها. حدّث الصفحة ثم أعد المحاولة.",
   },
   {
     test: /REPAIR_STATUS_INVALID/i,
@@ -37,7 +37,11 @@ const KNOWN_PATTERNS: Array<{ test: RegExp; ar: (m: RegExpMatchArray) => string 
   },
   {
     test: /REPAIR_REQUEST_CONFLICT/i,
-    ar: () => "تعذر تأكيد طلب التعديل بأمان. أغلق النافذة ثم أعد المحاولة.",
+    ar: () => "تعذر تأكيد الطلب بأمان. أغلق النافذة ثم أعد المحاولة.",
+  },
+  {
+    test: /REPAIR_SEPARATION_REASON_REQUIRED/i,
+    ar: () => "يجب توثيق سبب عدم فصل إعداد المعالجة عن اعتمادها.",
   },
   {
     test: /REPAIR_(INVALID_HEADER|ITEMS_REQUIRED|TYPE_INVALID_FOR_ISSUE)/i,

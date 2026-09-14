@@ -4,6 +4,7 @@ import { AlertCircle, ArrowRight, ClipboardCheck, FileClock, Info, Layers3, Penc
 import { Link, useParams } from "react-router-dom";
 import { EmptyState } from "@/components/EmptyState";
 import { PageHeader } from "@/components/PageHeader";
+import { ApproveInventoryRepairDialog } from "@/components/inventory-reconciliation/ApproveInventoryRepairDialog";
 import { EditInventoryRepairDraftDialog } from "@/components/inventory-reconciliation/EditInventoryRepairDraftDialog";
 import { SubmitInventoryRepairDraftDialog } from "@/components/inventory-reconciliation/SubmitInventoryRepairDraftDialog";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -145,6 +146,9 @@ export default function InventoryReconciliationRepairDetailPage() {
                   تعديل المسودة
                 </Button>
               </>
+            )}
+            {repair.status === "ready_for_review" && role === "admin" && user && (
+              <ApproveInventoryRepairDialog repair={repair} currentUserId={user.id} />
             )}
             <Button asChild variant="outline">
               <Link to="/reports/inventory-reconciliation/repairs">
