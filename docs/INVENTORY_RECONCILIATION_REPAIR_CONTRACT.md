@@ -4,7 +4,7 @@
 >
 > الفرع: `feature/inventory-control-staging`
 >
-> الحالة: العقد معتمد؛ Migration ‏2B اجتازت L3 المعزولة ولم تُطبق على Staging
+> الحالة: العقد معتمد؛ Migration ‏2B اجتازت L3 وتجربة Staging ذات الرجوع الكامل، ولم تُطبق دائمًا
 >
 > النطاق: فرع Staging فقط؛ لا تطبيق إنتاجي ولا تنفيذ إصلاح أعمال في 2B
 
@@ -378,4 +378,16 @@ TDD_REPAIR_LIFECYCLE_RED_OK
 /backups/staging/inventory-reconciliation-before-20260913-192242/repair-lifecycle-l3-rehearsal
 ```
 
-الخطوة التالية هي أخذ نسخة حديثة من Staging وخط أساس، ثم تجربة Migration ‏2B عليها داخل معاملة تنتهي بـ`ROLLBACK` قبل أي تطبيق دائم.
+بتاريخ 2026-09-14 أُخذت نسخة حديثة من Staging قبل 2B وحُفظت في:
+
+```text
+/backups/staging/inventory-repair-before-20260914-081004
+```
+
+أثبت خط الأساس وجود `613` منتجًا و`1354` حركة مخزون، وحالة التشخيص `rounding_only`، وغياب جميع جداول ودوال 2B وسجل إصدارها. بعد ذلك شُغلت Migration والسيناريوهات الستة عشر على مشروع Staging `dunzfxurefzlaamgghys` داخل معاملة واحدة انتهت بـ`ROLLBACK`. أكد فحص مستقل اختفاء كل مكونات 2B وتطابق أعداد وبصمات بيانات الأعمال مع النسخة. حُفظ دليل التجربة في:
+
+```text
+/backups/staging/inventory-repair-before-20260914-081004/repair-lifecycle-transactional-rehearsal
+```
+
+الخطوة التالية هي مراجعة واعتماد التطبيق الدائم لـMigration ‏2B على Staging فقط. لا تبدأ واجهة سجل المعالجة ولا المرحلة 2C قبل التحقق اللاحق للتطبيق وقبول المستخدم.
