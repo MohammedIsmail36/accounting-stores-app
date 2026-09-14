@@ -26,4 +26,11 @@ describe("InventoryReconciliationRepairDetailPage boundary", () => {
     expect(source).toContain('repair.status === "draft"');
     expect(source).toContain("تعديل المسودة");
   });
+
+  it("تعرض منفذ الحدث باسمه ودوره دون UUID أو طلب لكل حدث", () => {
+    expect(source).toContain('supabase.from("profiles").select("id, full_name").in("id", actorIds)');
+    expect(source).toContain('supabase.from("user_roles").select("user_id, role").in("user_id", actorIds)');
+    expect(source).toContain("نفّذ بواسطة:");
+    expect(source).not.toContain("shortId(event.actorId)");
+  });
 });

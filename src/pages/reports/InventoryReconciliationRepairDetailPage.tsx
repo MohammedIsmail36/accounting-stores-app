@@ -13,11 +13,13 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useSettings } from "@/contexts/SettingsContext";
+import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { formatDate, formatDateTime, formatNumber } from "@/lib/format";
 import {
   getInventoryRepairItemPath,
   inventoryRepairAxisLabel,
+  inventoryRepairActorLabel,
   inventoryRepairClassificationLabel,
   inventoryRepairEventLabel,
   inventoryRepairItemLabel,
@@ -32,6 +34,7 @@ import {
   type InventoryRepairEffect,
   type InventoryRepairEvent,
   type InventoryRepairItem,
+  type InventoryRepairActor,
 } from "@/lib/inventory-reconciliation-repair";
 import { isUUID } from "@/lib/route-labels";
 
@@ -40,6 +43,7 @@ const shortId = (value: string) => `${value.slice(0, 8)}…`;
 export default function InventoryReconciliationRepairDetailPage() {
   const { id = "" } = useParams();
   const { formatCurrency } = useSettings();
+  const { user, fullName, role } = useAuth();
   const [editOpen, setEditOpen] = useState(false);
 
   const { data, isLoading, error } = useQuery({
@@ -70,11 +74,30 @@ export default function InventoryReconciliationRepairDetailPage() {
       }
       if (!headerResult.data) return null;
 
+      const events = (eventsResult.data ?? []).map(parseInventoryRepairEvent);
+      const actorIds = [...new Set(events.map((event) => event.actorId))];
+      const actors: Record<string, InventoryRepairActor> = {};
+      if (actorIds.length > 0) {
+        const [profilesResult, rolesResult] = await Promise.all([
+          supabase.from("profiles").select("id, full_name").in("id", actorIds),
+          supabase.from("user_roles").select("user_id, role").in("user_id", actorIds),
+        ]);
+        const profileMap = new Map((profilesResult.data ?? []).map((profile) => [profile.id, profile.full_name]));
+        const roleMap = new Map((rolesResult.data ?? []).map((actorRole) => [actorRole.user_id, actorRole.role]));
+        for (const actorId of actorIds) {
+          actors[actorId] = {
+            fullName: profileMap.get(actorId) ?? null,
+            role: roleMap.get(actorId) ?? null,
+          };
+        }
+      }
+
       return {
         repair: parseInventoryRepairDetail(headerResult.data),
         items: (itemsResult.data ?? []).map(parseInventoryRepairItem),
         effects: (effectsResult.data ?? []).map(parseInventoryRepairEffect),
-        events: (eventsResult.data ?? []).map(parseInventoryRepairEvent),
+        events,
+        actors,
       };
     },
   });
@@ -93,6 +116,13 @@ export default function InventoryReconciliationRepairDetailPage() {
   if (!data) return <NotFoundState />;
 
   const { repair, items, effects, events } = data;
+  const actors = { ...data.actors };
+  if (user) {
+    actors[user.id] = {
+      fullName: fullName || actors[user.id]?.fullName || null,
+      role: role || actors[user.id]?.role || null,
+    };
+  }
   return (
     <div className="space-y-5" dir="rtl">
       <PageHeader
@@ -162,7 +192,7 @@ export default function InventoryReconciliationRepairDetailPage() {
           <ItemsTable items={items} formatCurrency={formatCurrency} />
         </TabsContent>
         <TabsContent value="events" className="mt-3">
-          <EventsList events={events} />
+          <EventsList events={events} actors={actors} />
         </TabsContent>
         <TabsContent value="effects" className="mt-3">
           <EffectsTable effects={effects} />
@@ -220,7 +250,7 @@ function ItemsTable({ items, formatCurrency }: { items: InventoryRepairItem[]; f
   );
 }
 
-function EventsList({ events }: { events: InventoryRepairEvent[] }) {
+function EventsList({ events, actors }: { events: InventoryRepairEvent[]; actors: Record<string, InventoryRepairActor> }) {
   if (events.length === 0) return <EmptyState icon={FileClock} title="لا توجد أحداث مسجلة" compact />;
   return <Card><CardContent className="divide-y p-0">{events.map((event) => (
     <div key={event.id} className="flex flex-col gap-2 p-4 sm:flex-row sm:items-center sm:justify-between">
@@ -231,7 +261,8 @@ function EventsList({ events }: { events: InventoryRepairEvent[] }) {
         </div>
       </div>
       <div className="text-xs text-muted-foreground sm:text-left">
-        <div>{formatDateTime(event.createdAt)}</div><div className="font-mono" dir="ltr">فاعل {shortId(event.actorId)}</div>
+        <div>{formatDateTime(event.createdAt)}</div>
+        <div>نفّذ بواسطة: {inventoryRepairActorLabel(actors[event.actorId])}</div>
       </div>
     </div>
   ))}</CardContent></Card>;

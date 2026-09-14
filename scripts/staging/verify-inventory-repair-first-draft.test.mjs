@@ -11,6 +11,9 @@ test("first-draft verifier is read-only, staging-bound, and baseline-aware", () 
   assert.doesNotThrow(() => validateFirstDraftVerifierSource(source));
   assert.match(source, /BEGIN TRANSACTION READ ONLY;/);
   assert.match(source, /repair_counts/);
+  assert.match(source, /--after-create/);
+  assert.match(source, /--after-edit/);
+  assert.match(source, /updated_events/);
   assert.match(source, /businessBaselinePreserved: true/);
   assert.doesNotMatch(source, /INSERT INTO|UPDATE public\.|DELETE FROM/);
 });

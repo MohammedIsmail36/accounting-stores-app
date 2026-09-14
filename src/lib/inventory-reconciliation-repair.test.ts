@@ -5,6 +5,7 @@ import {
   getInventoryRepairItemPath,
   inventoryRepairNumber,
   inventoryRepairItemLabel,
+  inventoryRepairActorLabel,
   inventoryRepairStatusLabel,
   parseInventoryRepairEvent,
   parseInventoryRepairItem,
@@ -44,6 +45,12 @@ describe("inventory reconciliation repair presentation", () => {
   it("تعرض رقمًا وحالة مفهومين", () => {
     expect(inventoryRepairNumber(12)).toBe("IR-0012");
     expect(inventoryRepairStatusLabel.ready_for_review).toBe("بانتظار المراجعة");
+  });
+
+  it("تعرض منفذ الحدث باسمه ودوره دون كشف المعرّف الداخلي", () => {
+    expect(inventoryRepairActorLabel({ fullName: "محمد إسماعيل", role: "admin" }))
+      .toBe("محمد إسماعيل — مدير");
+    expect(inventoryRepairActorLabel()).toBe("مستخدم مخوّل");
   });
 
   it("تحول بند المعالجة وتبني رابط المنتج", () => {

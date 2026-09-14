@@ -76,6 +76,11 @@ export interface InventoryRepairEffect {
   createdAt: string;
 }
 
+export interface InventoryRepairActor {
+  fullName: string | null;
+  role: string | null;
+}
+
 export const inventoryRepairStatusLabel: Record<InventoryRepairStatus, string> = {
   draft: "مسودة",
   ready_for_review: "بانتظار المراجعة",
@@ -126,6 +131,18 @@ export const inventoryRepairEventLabel: Record<string, string> = {
   execution_failed: "فشل التنفيذ",
   reversed: "عكس المعالجة",
 };
+
+const inventoryRepairActorRoleLabel: Record<string, string> = {
+  admin: "مدير",
+  accountant: "محاسب",
+  sales: "موظف مبيعات",
+};
+
+export function inventoryRepairActorLabel(actor?: InventoryRepairActor) {
+  const name = actor?.fullName?.trim() || "مستخدم مخوّل";
+  const role = actor?.role ? inventoryRepairActorRoleLabel[actor.role] : null;
+  return role ? `${name} — ${role}` : name;
+}
 
 type RepairRecord = Record<string, unknown>;
 

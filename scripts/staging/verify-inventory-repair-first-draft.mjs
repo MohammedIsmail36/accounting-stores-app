@@ -23,6 +23,8 @@ export function validateFirstDraftVerifierSource(source) {
     "repair_number = 1",
     "post_rounding_adjustment",
     "businessBaselinePreserved",
+    "--after-create",
+    "--after-edit",
   ]) {
     if (!source.includes(required)) throw new Error(`حاجز تحقق المسودة مفقود: ${required}`);
   }
@@ -54,7 +56,14 @@ function runCli(filePath, logPath) {
 }
 
 function main() {
-  if (process.argv.length > 2) throw new Error("هذا المشغل لا يقبل معاملات");
+  const mode = process.argv[2];
+  if (process.argv.length !== 3 || !["--after-create", "--after-edit"].includes(mode)) {
+    throw new Error("استخدم --after-create أو --after-edit");
+  }
+  const afterEdit = mode === "--after-edit";
+  const expectedVersion = afterEdit ? 2 : 1;
+  const expectedEvents = afterEdit ? 2 : 1;
+  const expectedUpdatedEvents = afterEdit ? 1 : 0;
   validateFirstDraftVerifierSource(readFileSync(fileURLToPath(import.meta.url), "utf8"));
   const linkedRef = readFileSync(projectRefPath, "utf8").trim();
   if (linkedRef !== expectedProjectRef) {
@@ -68,7 +77,7 @@ function main() {
     throw new Error("بصمة خط الأساس لا تطابق النسخة المحفوظة");
   }
 
-  const reportDir = mkdtempSync("/tmp/accounting-staging-inventory-repair-first-draft-");
+  const reportDir = mkdtempSync(`/tmp/accounting-staging-inventory-repair-${afterEdit ? "edited" : "first"}-draft-`);
   const sqlPath = join(reportDir, "verification.sql");
   const logPath = join(reportDir, "run.log");
   const reportPath = join(reportDir, "report.json");
@@ -91,6 +100,7 @@ SELECT jsonb_build_object(
       'version', r.version,
       'item_count', (SELECT count(*) FROM public.inventory_reconciliation_repair_items i WHERE i.repair_id = r.id),
       'created_events', (SELECT count(*) FROM public.inventory_reconciliation_repair_events e WHERE e.repair_id = r.id AND e.event_type = 'created'),
+      'updated_events', (SELECT count(*) FROM public.inventory_reconciliation_repair_events e WHERE e.repair_id = r.id AND e.event_type = 'updated'),
       'effects', (SELECT count(*) FROM public.inventory_reconciliation_repair_effects x WHERE x.repair_id = r.id),
       'item', (SELECT jsonb_build_object(
         'axis', i.axis,
@@ -137,9 +147,10 @@ ROLLBACK;
     throw new Error(`فشل تحقق هوية Staging؛ التشخيص المحمي: ${logPath}`);
   }
   if (verification.repair_counts?.repairs !== 1 || verification.repair_counts?.items !== 1
-      || verification.repair_counts?.events !== 1 || verification.repair_counts?.effects !== 0
-      || repair?.repair_number !== 1 || repair?.status !== "draft" || repair?.version !== 1
-      || repair?.item_count !== 1 || repair?.created_events !== 1 || repair?.effects !== 0
+      || verification.repair_counts?.events !== expectedEvents || verification.repair_counts?.effects !== 0
+      || repair?.repair_number !== 1 || repair?.status !== "draft" || repair?.version !== expectedVersion
+      || repair?.item_count !== 1 || repair?.created_events !== 1
+      || repair?.updated_events !== expectedUpdatedEvents || repair?.effects !== 0
       || item?.axis !== "source" || item?.classification !== "rounding"
       || item?.repair_type !== "post_rounding_adjustment" || item?.source_type !== "purchase_invoice"
       || item?.source_number !== "24" || item?.result_status !== "pending") {
@@ -157,6 +168,7 @@ ROLLBACK;
     verifiedAt: new Date().toISOString(),
     projectRef: expectedProjectRef,
     baselineArchive,
+    state: mode,
     repair: repair,
     repairRegistryOnly: true,
     businessBaselinePreserved: true,
@@ -164,8 +176,8 @@ ROLLBACK;
     productionModified: false,
   };
   writeFileSync(reportPath, `${JSON.stringify(report, null, 2)}\n`, { mode: 0o600 });
-  console.log("نجح تحقق أول مسودة على Staging");
-  console.log("IR-0001: مسودة واحدة، بند واحد، حدث إنشاء واحد، وصفر آثار تنفيذ");
+  console.log(`نجح تحقق ${afterEdit ? "تعديل" : "إنشاء"} المسودة على Staging`);
+  console.log(`IR-0001: إصدار ${expectedVersion}، بند واحد، ${expectedEvents} حدث، وصفر آثار تنفيذ`);
   console.log("بيانات الأعمال والتشخيص مطابقان لخط الأساس؛ لم يحدث إصلاح أو ترحيل");
   console.log(`REPORT_DIR=${reportDir}`);
 }
