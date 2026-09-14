@@ -39,6 +39,12 @@ describe("InventoryReconciliationRepairDetailPage boundary", () => {
     expect(source).toContain("currentUserId={user.id}");
   });
 
+  it("تعرض منفذ إعادة البطاقة للمدير فقط عندما يجتاز عقد النوع والحالة", () => {
+    expect(source).toContain("canExecuteInventoryProductCardRepair(repair, items)");
+    expect(source).toContain("ExecuteInventoryRepairDialog");
+    expect(source).toContain('productCardExecutionAvailable && role === "admin" && user');
+  });
+
   it("تعرض منفذ الحدث باسمه ودوره دون UUID أو طلب لكل حدث", () => {
     expect(source).toContain('supabase.from("profiles").select("id, full_name").in("id", actorIds)');
     expect(source).toContain('supabase.from("user_roles").select("user_id, role").in("user_id", actorIds)');

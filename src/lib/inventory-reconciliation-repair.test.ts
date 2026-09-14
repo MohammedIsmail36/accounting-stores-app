@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildInventoryRepairDraftItem,
   buildInventoryRepairUpdateItem,
+  canExecuteInventoryProductCardRepair,
   getInventoryRepairItemPath,
   inventoryRepairNumber,
   inventoryRepairItemLabel,
@@ -45,6 +46,50 @@ describe("inventory reconciliation repair presentation", () => {
   it("تعرض رقمًا وحالة مفهومين", () => {
     expect(inventoryRepairNumber(12)).toBe("IR-0012");
     expect(inventoryRepairStatusLabel.ready_for_review).toBe("بانتظار المراجعة");
+  });
+
+  it("تقصر التنفيذ على معالجة إعادة بطاقة معتمدة وكل بنودها معلقة وصالحة", () => {
+    const repair = {
+      ...parseInventoryRepairListRow({ ...validRow, status: "approved", version: 3 }),
+      diagnosticFingerprint: "fingerprint",
+      diagnosticSnapshotAt: validRow.updated_at,
+      sourceScope: "all_recorded_stock_effects",
+      accountingDate: null,
+      separationOverrideReason: null,
+      preparedBy: validRow.id,
+      submittedBy: validRow.id,
+      approvedBy: validRow.id,
+      executedBy: null,
+      cancelledBy: null,
+      cancellationReason: null,
+    };
+    const item = parseInventoryRepairItem({
+      id: validRow.id,
+      line_number: 1,
+      axis: "product",
+      issue_key: `product:${validRow.id}`,
+      classification: "product_balance",
+      repair_type: "rebuild_product_card",
+      product_id: validRow.id,
+      source_type: null,
+      source_id: null,
+      source_number: null,
+      original_journal_entry_id: null,
+      before_card_quantity: 5,
+      before_movement_quantity: 4,
+      before_movement_book_value: 100,
+      before_ledger_1104_value: null,
+      proposed_card_quantity: 4,
+      proposed_movement_book_value: null,
+      proposed_ledger_1104_value: null,
+      result_status: "pending",
+      result_message: null,
+      before_state: { name: "منتج اختبار", code: "P-1" },
+      proposed_state: { card_quantity: 4 },
+    });
+    expect(canExecuteInventoryProductCardRepair(repair, [item])).toBe(true);
+    expect(canExecuteInventoryProductCardRepair(repair, [{ ...item, repairType: "post_rounding_adjustment" }])).toBe(false);
+    expect(canExecuteInventoryProductCardRepair({ ...repair, status: "executed" }, [item])).toBe(false);
   });
 
   it("تعرض منفذ الحدث باسمه ودوره دون كشف المعرّف الداخلي", () => {

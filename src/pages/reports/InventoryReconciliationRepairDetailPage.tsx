@@ -6,6 +6,7 @@ import { EmptyState } from "@/components/EmptyState";
 import { PageHeader } from "@/components/PageHeader";
 import { ApproveInventoryRepairDialog } from "@/components/inventory-reconciliation/ApproveInventoryRepairDialog";
 import { EditInventoryRepairDraftDialog } from "@/components/inventory-reconciliation/EditInventoryRepairDraftDialog";
+import { ExecuteInventoryRepairDialog } from "@/components/inventory-reconciliation/ExecuteInventoryRepairDialog";
 import { SubmitInventoryRepairDraftDialog } from "@/components/inventory-reconciliation/SubmitInventoryRepairDraftDialog";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -20,6 +21,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { formatDate, formatDateTime, formatNumber } from "@/lib/format";
 import {
   getInventoryRepairItemPath,
+  canExecuteInventoryProductCardRepair,
   inventoryRepairAxisLabel,
   inventoryRepairActorLabel,
   inventoryRepairClassificationLabel,
@@ -118,6 +120,7 @@ export default function InventoryReconciliationRepairDetailPage() {
   if (!data) return <NotFoundState />;
 
   const { repair, items, effects, events } = data;
+  const productCardExecutionAvailable = canExecuteInventoryProductCardRepair(repair, items);
   const actors = { ...data.actors };
   if (user) {
     actors[user.id] = {
@@ -130,7 +133,7 @@ export default function InventoryReconciliationRepairDetailPage() {
       <PageHeader
         icon={ClipboardCheck}
         title={`${inventoryRepairNumber(repair.repairNumber)} — ${repair.title}`}
-        description="تفاصيل تشخيصية وتدقيقية للمعالجة دون تنفيذ أي أثر محاسبي أو مخزني"
+        description="تفاصيل تشخيصية وتدقيقية للمعالجة ومسار اعتمادها وتنفيذها"
         badge={(
           <Badge variant="outline" className={inventoryRepairStatusClass[repair.status]}>
             {inventoryRepairStatusLabel[repair.status]}
@@ -150,6 +153,9 @@ export default function InventoryReconciliationRepairDetailPage() {
             {repair.status === "ready_for_review" && role === "admin" && user && (
               <ApproveInventoryRepairDialog repair={repair} currentUserId={user.id} />
             )}
+            {productCardExecutionAvailable && role === "admin" && user && (
+              <ExecuteInventoryRepairDialog repair={repair} items={items} />
+            )}
             <Button asChild variant="outline">
               <Link to="/reports/inventory-reconciliation/repairs">
                 <ArrowRight className="ml-2 h-4 w-4" />
@@ -167,11 +173,29 @@ export default function InventoryReconciliationRepairDetailPage() {
         items={items}
       />
 
-      <Alert className="border-amber-200 bg-amber-50/60 dark:border-amber-900 dark:bg-amber-950/20">
-        <Info className="h-4 w-4 text-amber-700" />
-        <AlertTitle>العرض والمراجعة فقط</AlertTitle>
-        <AlertDescription>منفذ الإصلاح الفعلي غير مفعّل في 2B؛ لا تغيّر هذه الشاشة المنتجات أو الحركات أو القيود.</AlertDescription>
-      </Alert>
+      {repair.status === "executed" ? (
+        <Alert className="border-emerald-200 bg-emerald-50/60 dark:border-emerald-900 dark:bg-emerald-950/20">
+          <ClipboardCheck className="h-4 w-4 text-emerald-700" />
+          <AlertTitle>تم تنفيذ المعالجة</AlertTitle>
+          <AlertDescription>راجع البنود وسجل الأحداث وآثار التنفيذ أدناه للتحقق من النتيجة المسجلة.</AlertDescription>
+        </Alert>
+      ) : productCardExecutionAvailable ? (
+        <Alert className="border-amber-200 bg-amber-50/60 dark:border-amber-900 dark:bg-amber-950/20">
+          <Info className="h-4 w-4 text-amber-700" />
+          <AlertTitle>إعادة بناء بطاقة المنتج جاهزة للتنفيذ</AlertTitle>
+          <AlertDescription>
+            التنفيذ متاح للمدير فقط، ويعيد فحص البطاقة والحركات قبل تعديل الكمية دون إنشاء حركة أو قيد جديد.
+          </AlertDescription>
+        </Alert>
+      ) : (
+        <Alert className="border-slate-200 bg-slate-50/60 dark:border-slate-800 dark:bg-slate-950/20">
+          <Info className="h-4 w-4 text-slate-600" />
+          <AlertTitle>لا يوجد تنفيذ متاح لهذه المعالجة</AlertTitle>
+          <AlertDescription>
+            التنفيذ مفعّل حاليًا لإعادة بناء بطاقة المنتج المعتمدة فقط؛ بقية الأنواع تظل للعرض والمراجعة دون أثر.
+          </AlertDescription>
+        </Alert>
+      )}
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <SummaryCard label="الحالة" value={inventoryRepairStatusLabel[repair.status]} />
@@ -277,7 +301,7 @@ function EventsList({ events, actors }: { events: InventoryRepairEvent[]; actors
 }
 
 function EffectsTable({ effects }: { effects: InventoryRepairEffect[] }) {
-  if (effects.length === 0) return <EmptyState icon={Layers3} title="لا توجد آثار تنفيذ" description="هذا متوقع قبل تفعيل منفذات المرحلة 2C." compact />;
+  if (effects.length === 0) return <EmptyState icon={Layers3} title="لا توجد آثار تنفيذ" description="لم تُنفذ هذه المعالجة أو أن نوعها غير مفعّل للتنفيذ بعد." compact />;
   return <div className="overflow-x-auto rounded-md border"><Table>
     <TableHeader><TableRow><TableHead>نوع الأثر</TableHead><TableHead>الجدول</TableHead><TableHead>السجل</TableHead><TableHead>التاريخ</TableHead></TableRow></TableHeader>
     <TableBody>{effects.map((effect) => <TableRow key={effect.id}>

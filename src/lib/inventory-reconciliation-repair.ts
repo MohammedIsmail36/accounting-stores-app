@@ -213,6 +213,22 @@ export function inventoryRepairNumber(value: number) {
   return `IR-${String(value).padStart(4, "0")}`;
 }
 
+export function canExecuteInventoryProductCardRepair(
+  repair: InventoryRepairDetail,
+  items: InventoryRepairItem[],
+) {
+  return repair.status === "approved"
+    && items.length > 0
+    && items.every((item) => (
+      item.axis === "product"
+      && item.classification === "product_balance"
+      && item.repairType === "rebuild_product_card"
+      && Boolean(item.productId)
+      && item.proposedCardQuantity !== null
+      && item.resultStatus === "pending"
+    ));
+}
+
 export function parseInventoryRepairDetail(value: unknown): InventoryRepairDetail {
   const base = parseInventoryRepairListRow(value);
   const row = value as RepairRecord;
