@@ -20,3 +20,14 @@ test("حواجز Migration وملف الرجوع ترفض وجهة إنتاجي�
   assert.throws(() => validateRebuildMigrationSql(unsafe), /جزء مفقود|غير مسموحة/);
   assert.throws(() => validateRebuildRollbackSql(unsafe), /جزء مفقود|غير مسموحة/);
 });
+
+test("ملف الرجوع مقيد بتفويض Staging ويرفض الرجوع بعد تنفيذ فعلي", () => {
+  const rollback = readFileSync(
+    `${root}supabase/rollback/20260914190000_inventory_reconciliation_rebuild_product_card_executor.sql`,
+    "utf8",
+  );
+  assert.match(rollback, /STAGING_20260914190000/);
+  assert.match(rollback, /INVENTORY_REBUILD_ROLLBACK_HAS_EXECUTIONS/);
+  assert.match(rollback, /REPAIR_TYPE_NOT_ENABLED/);
+  assert.doesNotMatch(rollback, /\bCASCADE\b/i);
+});

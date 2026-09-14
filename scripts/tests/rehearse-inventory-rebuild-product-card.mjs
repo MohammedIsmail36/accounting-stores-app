@@ -129,8 +129,8 @@ const businessStateSql = `SELECT jsonb_build_object(
 
 function main() {
   const mode = process.argv[2] ?? "--check";
-  if (!['--check', '--expect-missing', '--run-migration'].includes(mode) || process.argv.length > 3) {
-    throw new Error("استخدم --check أو --expect-missing أو --run-migration");
+  if (!['--check', '--expect-missing', '--run-migration', '--test-explicit-rollback'].includes(mode) || process.argv.length > 3) {
+    throw new Error("استخدم --check أو --expect-missing أو --run-migration أو --test-explicit-rollback");
   }
 
   const contract = readFileSync(contractPath, "utf8");
@@ -183,6 +183,67 @@ ROLLBACK;`);
   const executorRollback = readFileSync(executorRollbackPath, "utf8");
   validateRebuildMigrationSql(executorMigration);
   validateRebuildRollbackSql(executorRollback);
+  if (mode === "--test-explicit-rollback") {
+    const reportDir = mkdtempSync("/tmp/accounting-inventory-rebuild-product-card-rollback-report-");
+    const logPath = join(reportDir, "run.log");
+    let output;
+    try {
+      output = psql(`\\set ON_ERROR_STOP on
+BEGIN;
+${diagnosticMigration}
+${lifecycleMigration}
+${executorMigration}
+SELECT set_config('app.inventory_rebuild_rollback_authorized', 'STAGING_20260914190000', true);
+${executorRollback}
+DO $verify_rollback$
+BEGIN
+  IF position('REPAIR_TYPE_NOT_ENABLED' IN pg_get_functiondef(
+    'public.execute_inventory_reconciliation_repair(uuid,integer,uuid)'::regprocedure
+  )) = 0 OR position('product_card_rebuilt' IN pg_get_functiondef(
+    'public.execute_inventory_reconciliation_repair(uuid,integer,uuid)'::regprocedure
+  )) > 0 THEN
+    RAISE EXCEPTION 'INVENTORY_REBUILD_EXPLICIT_ROLLBACK_FAILED';
+  END IF;
+  IF to_regclass('public.inventory_reconciliation_repairs') IS NULL
+     OR to_regclass('public.inventory_reconciliation_repair_items') IS NULL
+     OR to_regclass('public.inventory_reconciliation_repair_effects') IS NULL
+     OR to_regclass('public.inventory_reconciliation_repair_events') IS NULL THEN
+    RAISE EXCEPTION 'INVENTORY_REBUILD_ROLLBACK_REMOVED_LIFECYCLE';
+  END IF;
+END;
+$verify_rollback$;
+SELECT 'INVENTORY_REBUILD_EXPLICIT_ROLLBACK_OK';
+ROLLBACK;`);
+    } catch (error) {
+      writeFileSync(logPath, `${error.message}\n`, { mode: 0o600 });
+      throw new Error(`فشل اختبار ملف رجوع 2C؛ التشخيص المحمي: ${logPath}`);
+    }
+    const afterRollbackTest = psql(businessStateSql);
+    if (!output.includes("INVENTORY_REBUILD_EXPLICIT_ROLLBACK_OK")) {
+      throw new Error("لم تظهر علامة نجاح ملف رجوع 2C");
+    }
+    if (before !== afterRollbackTest) {
+      throw new Error("تغيرت بيانات أعمال L3 بعد اختبار ملف الرجوع رغم ROLLBACK");
+    }
+    const reportPath = join(reportDir, "report.json");
+    writeFileSync(reportPath, `${JSON.stringify({
+      status: "INVENTORY_REBUILD_EXPLICIT_ROLLBACK_OK",
+      verifiedAt: new Date().toISOString(),
+      container,
+      database,
+      migration: executorMigrationPath,
+      rollback: executorRollbackPath,
+      lifecycleObjectsPreserved: true,
+      stage2BGuardRestored: true,
+      migrationRolledBack: true,
+      isolatedBusinessStatePreserved: true,
+      productionOrHostedStagingModified: false,
+    }, null, 2)}\n`, { mode: 0o600 });
+    console.log("نجح اختبار ملف رجوع 2C داخل L3 المعزولة");
+    console.log("عاد منفذ 2B المحجوب وبقيت جداول الدورة وبيانات الأعمال كما هي");
+    console.log(`التقرير: ${reportPath}`);
+    return;
+  }
   const contractBody = contract
     .replace(/^\\set ON_ERROR_STOP on\s*/m, "")
     .replace(/^BEGIN;\s*/m, "");
