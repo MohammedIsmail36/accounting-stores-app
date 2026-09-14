@@ -5,6 +5,7 @@ import {
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
+  ClipboardList,
   Info,
   RefreshCw,
 } from "lucide-react";
@@ -194,6 +195,14 @@ export default function InventoryReconciliationPage() {
         icon={RefreshCw}
         title="مطابقة المخزون (تشخيصية)"
         description="مقارنة موحدة وآمنة بين بطاقة المنتج وحركات المخزون وحساب 1104، دون إجراء أي تعديل على البيانات"
+        actions={(
+          <Button asChild variant="outline">
+            <Link to="/reports/inventory-reconciliation/repairs">
+              <ClipboardList className="ml-2 h-4 w-4" />
+              سجل المعالجات
+            </Link>
+          </Button>
+        )}
       />
 
       {totals && (

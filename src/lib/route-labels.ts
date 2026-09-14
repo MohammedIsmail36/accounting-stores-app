@@ -40,6 +40,7 @@ export const routeLabels: Record<string, string> = {
   "profit-loss": "الأرباح والخسائر",
   commission: "حاسبة العمولة",
   "inventory-reconciliation": "تسوية المخزون",
+  repairs: "سجل المعالجات",
   "inventory-valuation": "تقييم المخزون",
   "inventory-aging": "تعمير المخزون",
   "inventory-reorder": "إعادة الطلب والنواقص",

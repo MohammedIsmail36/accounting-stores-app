@@ -81,6 +81,7 @@ const AccountBalancesPage = lazy(() => import("./pages/reports/AccountBalancesPa
 const ProfitLossPage = lazy(() => import("./pages/reports/ProfitLossPage"));
 const CommissionCalculatorPage = lazy(() => import("./pages/reports/CommissionCalculatorPage"));
 const InventoryReconciliationPage = lazy(() => import("./pages/reports/InventoryReconciliationPage"));
+const InventoryReconciliationRepairsPage = lazy(() => import("./pages/reports/InventoryReconciliationRepairsPage"));
 const InventoryValuationPage = lazy(() => import("./pages/reports/InventoryValuationPage"));
 const InventoryAgingPage = lazy(() => import("./pages/reports/InventoryAgingPage"));
 const InventoryReorderPage = lazy(() => import("./pages/reports/InventoryReorderPage"));
@@ -189,6 +190,7 @@ const App = () => (
             <Route path="/reports/inventory-reorder" element={<ProtectedRoute allowedRoles={["admin", "accountant"]}><AppLayout>{withSuspense(<InventoryReorderPage />)}</AppLayout></ProtectedRoute>} />
             <Route path="/reports/inventory-kpis" element={<ProtectedRoute allowedRoles={["admin", "accountant"]}><AppLayout>{withSuspense(<InventoryKpisPage />)}</AppLayout></ProtectedRoute>} />
             <Route path="/reports/inventory-reconciliation" element={<ProtectedRoute allowedRoles={["admin", "accountant"]}><AppLayout>{withSuspense(<InventoryReconciliationPage />)}</AppLayout></ProtectedRoute>} />
+            <Route path="/reports/inventory-reconciliation/repairs" element={<ProtectedRoute allowedRoles={["admin", "accountant"]}><AppLayout>{withSuspense(<InventoryReconciliationRepairsPage />)}</AppLayout></ProtectedRoute>} />
             <Route path="/reports/system-health" element={<ProtectedRoute allowedRoles={["admin", "accountant"]}><AppLayout>{withSuspense(<SystemHealthPage />)}</AppLayout></ProtectedRoute>} />
 
             <Route path="/customer-statement" element={<ProtectedRoute allowedRoles={["admin", "accountant", "sales"]}><AppLayout>{withSuspense(<CustomerStatement />)}</AppLayout></ProtectedRoute>} />
