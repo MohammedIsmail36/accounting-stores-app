@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { PageHeader } from "@/components/PageHeader";
+import { CreateInventoryRepairDialog } from "@/components/inventory-reconciliation/CreateInventoryRepairDialog";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -91,6 +92,7 @@ export default function InventoryReconciliationPage() {
   const [diagnostic, setDiagnostic] = useState<InventoryReconciliationDiagnostic | null>(null);
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [repairTarget, setRepairTarget] = useState<InventoryReconciliationProductRow | InventoryReconciliationSourceRow | null>(null);
 
   useEffect(() => {
     const currentRequest = ++requestId.current;
@@ -326,13 +328,14 @@ export default function InventoryReconciliationPage() {
             <>
               <div className={`overflow-x-auto rounded-md border ${loading ? "opacity-60" : ""}`}>
                 {section === "products" ? (
-                  <ProductsTable rows={productRows} formatCurrency={formatCurrency} onlyIssues={onlyIssues} />
+                  <ProductsTable rows={productRows} formatCurrency={formatCurrency} onlyIssues={onlyIssues} onPrepare={setRepairTarget} />
                 ) : (
                   <SourcesTable
                     rows={sourceRows}
                     formatCurrency={formatCurrency}
                     onlyIssues={onlyIssues}
                     prefixes={sourcePrefixes}
+                    onPrepare={setRepairTarget}
                   />
                 )}
               </div>
@@ -369,6 +372,16 @@ export default function InventoryReconciliationPage() {
           )}
         </CardContent>
       </Card>
+
+      <CreateInventoryRepairDialog
+        open={repairTarget !== null}
+        onOpenChange={(open) => !open && setRepairTarget(null)}
+        row={repairTarget}
+        rowLabel={repairTarget?.kind === "product"
+          ? `${repairTarget.name} — ${repairTarget.code}`
+          : repairTarget ? sourceLabel(repairTarget, sourcePrefixes) : ""}
+        diagnostic={diagnostic}
+      />
     </div>
   );
 }
@@ -377,10 +390,12 @@ function ProductsTable({
   rows,
   formatCurrency,
   onlyIssues,
+  onPrepare,
 }: {
   rows: InventoryReconciliationProductRow[];
   formatCurrency: (value: number) => string;
   onlyIssues: boolean;
+  onPrepare: (row: InventoryReconciliationProductRow) => void;
 }) {
   if (rows.length === 0) {
     return <EmptyDiagnostic message={onlyIssues ? "لا توجد مشاكل سلامة في أرصدة المنتجات." : "لا توجد منتجات ضمن نطاق البحث."} />;
@@ -398,6 +413,7 @@ function ProductsTable({
           <TableHead className="text-center">تقييم WAC</TableHead>
           <TableHead className="text-center">فرق تحليلي</TableHead>
           <TableHead>حالة السلامة</TableHead>
+          <TableHead className="w-32">الإجراء</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -421,6 +437,11 @@ function ProductsTable({
               </Badge>
               {row.reasonCodes.length > 0 && <div className="mt-1 max-w-xs text-xs text-muted-foreground">{rowReasons(row.reasonCodes)}</div>}
             </TableCell>
+            <TableCell>
+              {row.canPrepareRepair ? (
+                <Button size="sm" variant="outline" onClick={() => onPrepare(row)}>إعداد مسودة</Button>
+              ) : <span className="text-muted-foreground">—</span>}
+            </TableCell>
           </TableRow>
         ))}
       </TableBody>
@@ -433,11 +454,13 @@ function SourcesTable({
   formatCurrency,
   onlyIssues,
   prefixes,
+  onPrepare,
 }: {
   rows: InventoryReconciliationSourceRow[];
   formatCurrency: (value: number) => string;
   onlyIssues: boolean;
   prefixes: InventoryDocumentPrefixes;
+  onPrepare: (row: InventoryReconciliationSourceRow) => void;
 }) {
   if (rows.length === 0) {
     return <EmptyDiagnostic message={onlyIssues ? "لا توجد ملاحظات في روابط المستندات والقيود والحركات." : "لا توجد مصادر ضمن نطاق البحث."} />;
@@ -454,6 +477,7 @@ function SourcesTable({
           <TableHead className="text-center">أثر 1104</TableHead>
           <TableHead className="text-center">الفرق</TableHead>
           <TableHead>التشخيص</TableHead>
+          <TableHead className="w-32">الإجراء</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -492,6 +516,11 @@ function SourcesTable({
                 {inventoryClassificationLabel[row.classification] ?? row.classification}
               </Badge>
               {row.reasonCodes.length > 0 && <div className="mt-1 max-w-xs text-xs text-muted-foreground">{rowReasons(row.reasonCodes)}</div>}
+            </TableCell>
+            <TableCell>
+              {row.canPrepareRepair ? (
+                <Button size="sm" variant="outline" onClick={() => onPrepare(row)}>إعداد مسودة</Button>
+              ) : <span className="text-muted-foreground">—</span>}
             </TableCell>
           </TableRow>
           );

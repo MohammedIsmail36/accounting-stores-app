@@ -299,3 +299,71 @@ export function getInventoryRepairItemPath(item: InventoryRepairItem) {
   const base = item.sourceType ? routes[item.sourceType] : null;
   return base ? `${base}/${item.sourceId}` : null;
 }
+
+export interface InventoryRepairDraftDiagnosticRow {
+  kind: "product" | "source";
+  classification: string;
+  canPrepareRepair: boolean;
+  productId?: string;
+  sourceKey?: string;
+  sourceType?: string;
+  sourceId?: string;
+}
+
+const repairTypeByClassification: Record<string, string> = {
+  product_balance: "rebuild_product_card",
+  movement_without_journal: "create_missing_inventory_journal",
+  journal_without_movement: "reverse_unbacked_inventory_journal",
+  undocumented_effect: "manual_review",
+  rounding: "post_rounding_adjustment",
+};
+
+export function buildInventoryRepairDraftItem(row: InventoryRepairDraftDiagnosticRow) {
+  const repairType = repairTypeByClassification[row.classification];
+  if (!row.canPrepareRepair || !repairType) {
+    throw new Error("هذا الانحراف غير متاح لإعداد مسودة معالجة");
+  }
+
+  if (row.kind === "product") {
+    if (!row.productId || row.classification !== "product_balance") {
+      throw new Error("بيانات منتج المعالجة غير مكتملة");
+    }
+    return {
+      axis: "product",
+      issue_key: `product:${row.productId}`,
+      classification: row.classification,
+      repair_type: repairType,
+      product_id: row.productId,
+      proposed_state: {},
+    };
+  }
+
+  if (!row.sourceKey || !row.sourceType || !row.sourceId) {
+    throw new Error("بيانات مصدر المعالجة غير مكتملة");
+  }
+  return {
+    axis: "source",
+    issue_key: row.sourceKey,
+    classification: row.classification,
+    repair_type: repairType,
+    source_type: row.sourceType,
+    source_id: row.sourceId,
+    proposed_state: {},
+  };
+}
+
+export function parseInventoryRepairCommandResult(value: unknown) {
+  const row = objectValue(value);
+  const repairNumber = Number(row.repair_number);
+  const version = Number(row.version);
+  const status = row.status as InventoryRepairStatus;
+  if (!Number.isSafeInteger(repairNumber) || !Number.isSafeInteger(version) || !inventoryRepairStatusLabel[status]) {
+    throw new Error("استجابة إنشاء مسودة المعالجة غير صالحة");
+  }
+  return {
+    id: requiredText(row.id),
+    repairNumber,
+    status,
+    version,
+  };
+}

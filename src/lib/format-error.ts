@@ -11,6 +11,22 @@ interface SupabaseLikeError {
 }
 
 const KNOWN_PATTERNS: Array<{ test: RegExp; ar: (m: RegExpMatchArray) => string }> = [
+  {
+    test: /REPAIR_ISSUE_ACTIVE/i,
+    ar: () => "توجد مسودة أو معالجة نشطة لهذا الانحراف بالفعل. افتح سجل المعالجات لمراجعتها.",
+  },
+  {
+    test: /REPAIR_(CLASSIFICATION_CHANGED|ISSUE_NOT_FOUND|SOURCE_NOT_FOUND|ISSUE_KEY_MISMATCH)/i,
+    ar: () => "تغير التشخيص منذ فتح الصفحة. حدّث التقرير ثم أعد المحاولة.",
+  },
+  {
+    test: /REPAIR_ACCESS_DENIED/i,
+    ar: () => "ليس لديك صلاحية لإعداد معالجة مخزون.",
+  },
+  {
+    test: /REPAIR_(INVALID_HEADER|ITEMS_REQUIRED|TYPE_INVALID_FOR_ISSUE)/i,
+    ar: () => "بيانات مسودة المعالجة غير مكتملة أو لا تتوافق مع التشخيص الحالي.",
+  },
   // Custom RAISE EXCEPTION من triggers / RPCs (الأولوية القصوى — رسائلنا أصلاً عربية)
   {
     test: /(الفترة مقفلة|الكمية المرتجعة|قيد الإقفال|كمية المرتجع|locked period)/i,

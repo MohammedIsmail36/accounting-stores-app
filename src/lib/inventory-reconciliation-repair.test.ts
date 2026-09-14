@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildInventoryRepairDraftItem,
   getInventoryRepairItemPath,
   inventoryRepairNumber,
   inventoryRepairItemLabel,
   inventoryRepairStatusLabel,
   parseInventoryRepairEvent,
   parseInventoryRepairItem,
+  parseInventoryRepairCommandResult,
   parseInventoryRepairListRow,
 } from "./inventory-reconciliation-repair";
 
@@ -81,5 +83,42 @@ describe("inventory reconciliation repair presentation", () => {
       actor_id: validRow.id,
       created_at: validRow.prepared_at,
     })).toThrow("سجل معالجة المطابقة غير صالح");
+  });
+
+  it("تبني بند مسودة مصدر من التصنيف دون اختيار يدوي لنوع المعالجة", () => {
+    expect(buildInventoryRepairDraftItem({
+      kind: "source",
+      classification: "rounding",
+      canPrepareRepair: true,
+      sourceKey: `purchase_invoice:${validRow.id}`,
+      sourceType: "purchase_invoice",
+      sourceId: validRow.id,
+    })).toEqual({
+      axis: "source",
+      issue_key: `purchase_invoice:${validRow.id}`,
+      classification: "rounding",
+      repair_type: "post_rounding_adjustment",
+      source_type: "purchase_invoice",
+      source_id: validRow.id,
+      proposed_state: {},
+    });
+  });
+
+  it("ترفض إعداد مسودة لسجل لم تسمح به دالة التشخيص", () => {
+    expect(() => buildInventoryRepairDraftItem({
+      kind: "product",
+      classification: "matched",
+      canPrepareRepair: false,
+      productId: validRow.id,
+    })).toThrow("غير متاح");
+  });
+
+  it("تتحقق من نتيجة أمر إنشاء المسودة", () => {
+    expect(parseInventoryRepairCommandResult({
+      id: validRow.id,
+      repair_number: 1,
+      status: "draft",
+      version: 1,
+    })).toEqual({ id: validRow.id, repairNumber: 1, status: "draft", version: 1 });
   });
 });
