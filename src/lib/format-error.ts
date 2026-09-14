@@ -29,7 +29,7 @@ const KNOWN_PATTERNS: Array<{ test: RegExp; ar: (m: RegExpMatchArray) => string 
   },
   {
     test: /REPAIR_STATUS_INVALID/i,
-    ar: () => "لم تعد المعالجة في حالة مسودة، لذلك لا يمكن تعديلها.",
+    ar: () => "تغيرت حالة المعالجة، لذلك لا يمكن تنفيذ الإجراء المطلوب. حدّث الصفحة.",
   },
   {
     test: /REPAIR_NOT_FOUND/i,

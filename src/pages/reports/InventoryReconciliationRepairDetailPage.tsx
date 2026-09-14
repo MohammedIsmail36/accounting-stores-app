@@ -5,6 +5,7 @@ import { Link, useParams } from "react-router-dom";
 import { EmptyState } from "@/components/EmptyState";
 import { PageHeader } from "@/components/PageHeader";
 import { EditInventoryRepairDraftDialog } from "@/components/inventory-reconciliation/EditInventoryRepairDraftDialog";
+import { SubmitInventoryRepairDraftDialog } from "@/components/inventory-reconciliation/SubmitInventoryRepairDraftDialog";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -137,10 +138,13 @@ export default function InventoryReconciliationRepairDetailPage() {
         actions={(
           <>
             {repair.status === "draft" && (
-              <Button onClick={() => setEditOpen(true)}>
-                <Pencil className="ml-2 h-4 w-4" />
-                تعديل المسودة
-              </Button>
+              <>
+                <SubmitInventoryRepairDraftDialog repair={repair} itemsCount={items.length} />
+                <Button variant="outline" onClick={() => setEditOpen(true)}>
+                  <Pencil className="ml-2 h-4 w-4" />
+                  تعديل المسودة
+                </Button>
+              </>
             )}
             <Button asChild variant="outline">
               <Link to="/reports/inventory-reconciliation/repairs">
