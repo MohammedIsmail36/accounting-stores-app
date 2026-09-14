@@ -1,0 +1,23 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { describe, expect, it } from "vitest";
+
+const source = readFileSync(resolve(process.cwd(), "src/pages/reports/InventoryReconciliationRepairDetailPage.tsx"), "utf8");
+
+describe("InventoryReconciliationRepairDetailPage boundary", () => {
+  it("تقرأ الرأس والبنود والآثار والأحداث فقط", () => {
+    expect(source).toContain('supabase.from("inventory_reconciliation_repairs"');
+    expect(source).toContain('supabase.from("inventory_reconciliation_repair_items"');
+    expect(source).toContain('supabase.from("inventory_reconciliation_repair_effects"');
+    expect(source).toContain('supabase.from("inventory_reconciliation_repair_events"');
+  });
+
+  it("لا تستدعي دورة الكتابة أو التنفيذ", () => {
+    expect(source).not.toContain("create_inventory_reconciliation_repair");
+    expect(source).not.toContain("approve_inventory_reconciliation_repair");
+    expect(source).not.toContain("execute_inventory_reconciliation_repair");
+    expect(source).not.toContain(".insert(");
+    expect(source).not.toContain(".update(");
+    expect(source).not.toContain(".delete(");
+  });
+});

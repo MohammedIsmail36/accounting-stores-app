@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { ColumnDef, PaginationState } from "@tanstack/react-table";
 import { ClipboardList, Info, RefreshCw } from "lucide-react";
 import { Link } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { PageHeader } from "@/components/PageHeader";
 import { DataTable, DataTableColumnHeader } from "@/components/ui/data-table";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -24,6 +25,7 @@ const PAGE_SIZE = 20;
 const ALL_STATUSES = "all";
 
 export default function InventoryReconciliationRepairsPage() {
+  const navigate = useNavigate();
   const [pagination, setPagination] = useState<PaginationState>({
     pageIndex: 0,
     pageSize: PAGE_SIZE,
@@ -159,6 +161,7 @@ export default function InventoryReconciliationRepairsPage() {
         onPaginationChange={setPagination}
         showColumnToggle={false}
         compactRows
+        onRowClick={(row) => navigate(`/reports/inventory-reconciliation/repairs/${row.id}`)}
         toolbarContent={(
           <div className="flex w-full items-center gap-2 sm:w-auto">
             <Select value={status} onValueChange={setStatus} dir="rtl">
