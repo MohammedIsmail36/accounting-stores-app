@@ -13,6 +13,21 @@ BEGIN
 END;
 $guard$;
 
+-- L3 authentication fixtures: transaction-local definitions that read the
+-- same JWT settings used by hosted Supabase. ROLLBACK restores the originals.
+CREATE OR REPLACE FUNCTION auth.role()
+RETURNS text LANGUAGE sql STABLE AS $$
+  SELECT COALESCE(
+    NULLIF(current_setting('request.jwt.claim.role', true), ''),
+    NULLIF(current_setting('request.jwt.claims', true), '')::jsonb->>'role'
+  )
+$$;
+
+CREATE OR REPLACE FUNCTION auth.uid()
+RETURNS uuid LANGUAGE sql STABLE AS $$
+  SELECT (NULLIF(current_setting('request.jwt.claims', true), '')::jsonb->>'sub')::uuid
+$$;
+
 CREATE TEMP TABLE missing_journal_contract_ids (
   name text PRIMARY KEY,
   id uuid NOT NULL
@@ -48,6 +63,8 @@ BEGIN
     jsonb_build_object('role', 'authenticated', 'sub', v_admin)::text, true);
 END;
 $$;
+
+SELECT pg_temp.set_2d_admin();
 
 CREATE FUNCTION pg_temp.add_2d_source(
   p_source_type text,
