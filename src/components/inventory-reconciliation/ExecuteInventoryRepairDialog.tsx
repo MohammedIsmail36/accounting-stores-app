@@ -17,6 +17,9 @@ import {
 } from "@/lib/inventory-reconciliation-repair";
 import { formatNumber } from "@/lib/format";
 import { notify } from "@/lib/notify";
+import { createRequestTimeout } from "@/lib/request-timeout";
+
+const EXECUTION_REQUEST_TIMEOUT_MS = 20_000;
 
 interface ExecuteInventoryRepairDialogProps {
   repair: InventoryRepairDetail;
@@ -61,16 +64,18 @@ export function ExecuteInventoryRepairDialog({
     }
 
     setExecuting(true);
+    const requestTimeout = createRequestTimeout(EXECUTION_REQUEST_TIMEOUT_MS);
     try {
       const { data, error } = await supabase.rpc("execute_inventory_reconciliation_repair" as never, {
         p_id: repair.id,
         p_expected_version: repair.version,
         p_request_id: requestId,
-      } as never);
+      } as never).abortSignal(requestTimeout.signal);
       if (error) throw error;
       const result = parseInventoryRepairCommandResult(data);
       if (result.status !== "executed") throw new Error("لم تنتقل المعالجة إلى حالة التنفيذ");
-      await Promise.all([
+      setOpen(false);
+      void Promise.allSettled([
         queryClient.invalidateQueries({ queryKey: ["inventory-reconciliation-repair", repair.id] }),
         queryClient.invalidateQueries({ queryKey: ["inventory-reconciliation-repairs"] }),
       ]);
@@ -78,14 +83,26 @@ export function ExecuteInventoryRepairDialog({
         "تم تنفيذ المعالجة",
         "أعيدت كميات بطاقات المنتجات من الحركات المسجلة دون إنشاء حركة مخزون أو قيد جديد.",
       );
-      setOpen(false);
     } catch (error) {
-      notify.dbError(
-        "تعذر تنفيذ المعالجة",
-        error,
-        "لم تُنفذ المعالجة. قد تكون البطاقة أو الحركات تغيرت بعد الاعتماد؛ حدّث الصفحة وراجع التشخيص.",
-      );
+      if (requestTimeout.didTimeout()) {
+        setOpen(false);
+        void Promise.allSettled([
+          queryClient.invalidateQueries({ queryKey: ["inventory-reconciliation-repair", repair.id] }),
+          queryClient.invalidateQueries({ queryKey: ["inventory-reconciliation-repairs"] }),
+        ]);
+        notify.warning(
+          "انتهت مهلة الاتصال",
+          "حالة التنفيذ غير مؤكدة. لا تُعد المحاولة؛ حدّث الصفحة وتحقق من حالة المعالجة أولًا.",
+        );
+      } else {
+        notify.dbError(
+          "تعذر تنفيذ المعالجة",
+          error,
+          "لم تُنفذ المعالجة. قد تكون البطاقة أو الحركات تغيرت بعد الاعتماد؛ حدّث الصفحة وراجع التشخيص.",
+        );
+      }
     } finally {
+      requestTimeout.clear();
       setExecuting(false);
     }
   }
