@@ -20,4 +20,11 @@ describe("InventoryReconciliationRepairsPage boundary", () => {
     expect(source).not.toContain(".update(");
     expect(source).not.toContain(".delete(");
   });
+
+  it("تفصل الموضوع عن سبب المعالجة وتحافظ على صف مضغوط", () => {
+    expect(source).toContain('accessorKey: "title"');
+    expect(source).toContain('accessorKey: "explanation"');
+    expect(source).toContain('header: "سبب المعالجة"');
+    expect(source).toContain("compactRows");
+  });
 });

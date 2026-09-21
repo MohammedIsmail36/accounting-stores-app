@@ -27,6 +27,8 @@ export interface InventoryReconciliationProductRow {
   productId: string;
   code: string;
   name: string;
+  brandName: string | null;
+  modelNumber: string | null;
   isActive: boolean;
   cardQuantity: number;
   movementQuantity: number;
@@ -129,11 +131,14 @@ const stringArray = (value: unknown, field: string): string[] => {
 
 const parseProductRow = (value: unknown, index: number): InventoryReconciliationProductRow => {
   const row = record(value, `rows[${index}]`);
+  const classification = text(row.classification, `rows[${index}].classification`);
   return {
     kind: "product",
     productId: text(row.product_id, `rows[${index}].product_id`),
     code: text(row.code, `rows[${index}].code`),
     name: text(row.name, `rows[${index}].name`),
+    brandName: nullableText(row.brand_name, `rows[${index}].brand_name`),
+    modelNumber: nullableText(row.model_number, `rows[${index}].model_number`),
     isActive: boolean(row.is_active, `rows[${index}].is_active`),
     cardQuantity: number(row.card_quantity, `rows[${index}].card_quantity`),
     movementQuantity: number(row.movement_quantity, `rows[${index}].movement_quantity`),
@@ -151,14 +156,17 @@ const parseProductRow = (value: unknown, index: number): InventoryReconciliation
     ),
     lastMovementDate: nullableText(row.last_movement_date, `rows[${index}].last_movement_date`),
     movementCount: number(row.movement_count, `rows[${index}].movement_count`),
-    classification: text(row.classification, `rows[${index}].classification`),
+    classification,
     reasonCodes: stringArray(row.reason_codes, `rows[${index}].reason_codes`),
-    canPrepareRepair: boolean(row.can_prepare_repair, `rows[${index}].can_prepare_repair`),
+    canPrepareRepair:
+      classification !== "matched"
+      && boolean(row.can_prepare_repair, `rows[${index}].can_prepare_repair`),
   };
 };
 
 const parseSourceRow = (value: unknown, index: number): InventoryReconciliationSourceRow => {
   const row = record(value, `rows[${index}]`);
+  const classification = text(row.classification, `rows[${index}].classification`);
   return {
     kind: "source",
     sourceKey: text(row.source_key, `rows[${index}].source_key`),
@@ -177,10 +185,12 @@ const parseSourceRow = (value: unknown, index: number): InventoryReconciliationS
     movementBookValue: number(row.movement_book_value, `rows[${index}].movement_book_value`),
     ledger1104Value: number(row.ledger_1104_value, `rows[${index}].ledger_1104_value`),
     sourceDifference: number(row.source_difference, `rows[${index}].source_difference`),
-    classification: text(row.classification, `rows[${index}].classification`),
+    classification,
     reasonCodes: stringArray(row.reason_codes, `rows[${index}].reason_codes`),
     isRoundingOnly: boolean(row.is_rounding_only, `rows[${index}].is_rounding_only`),
-    canPrepareRepair: boolean(row.can_prepare_repair, `rows[${index}].can_prepare_repair`),
+    canPrepareRepair:
+      classification !== "matched"
+      && boolean(row.can_prepare_repair, `rows[${index}].can_prepare_repair`),
   };
 };
 

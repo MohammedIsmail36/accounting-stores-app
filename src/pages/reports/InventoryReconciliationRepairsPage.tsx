@@ -93,11 +93,20 @@ export default function InventoryReconciliationRepairsPage() {
       accessorKey: "title",
       header: "الموضوع",
       cell: ({ row }) => (
-        <div className="max-w-md">
-          <div className="font-medium">{row.original.title}</div>
-          <div className="truncate text-xs text-muted-foreground">{row.original.explanation}</div>
+        <div className="max-w-sm truncate whitespace-nowrap font-medium" title={row.original.title}>
+          {row.original.title}
         </div>
       ),
+    },
+    {
+      accessorKey: "explanation",
+      header: "سبب المعالجة",
+      cell: ({ row }) => (
+        <div className="max-w-sm truncate whitespace-nowrap text-muted-foreground" title={row.original.explanation}>
+          {row.original.explanation}
+        </div>
+      ),
+      meta: { hideOnMobile: true },
     },
     {
       accessorKey: "status",
@@ -130,7 +139,7 @@ export default function InventoryReconciliationRepairsPage() {
       <PageHeader
         icon={ClipboardList}
         title="سجل معالجات مطابقة المخزون"
-        description="تتبع المسودات والمراجعات والاعتمادات دون تنفيذ أي تعديل فعلي على المخزون"
+        description="تتبع المسودات والمراجعات والاعتمادات وآثار التنفيذ الموثقة"
         actions={(
           <Button asChild variant="outline">
             <Link to="/reports/inventory-reconciliation">العودة إلى التشخيص</Link>
@@ -140,9 +149,9 @@ export default function InventoryReconciliationRepairsPage() {
 
       <Alert className="border-amber-200 bg-amber-50/60 dark:border-amber-900 dark:bg-amber-950/20">
         <Info className="h-4 w-4 text-amber-700" />
-        <AlertTitle>مرحلة الاعتماد فقط</AlertTitle>
+        <AlertTitle>التنفيذ متاح لنوع محدد فقط</AlertTitle>
         <AlertDescription>
-          التنفيذ المحاسبي والمخزني غير مفعّل في هذه المرحلة؛ اعتماد الطلب لا يغيّر المنتجات أو الحركات أو القيود.
+          اعتماد الطلب وحده لا يغيّر البيانات. التنفيذ متاح لإعادة بناء كمية بطاقة المنتج المعتمدة فقط؛ بقية أنواع المعالجة ما زالت للعرض والمراجعة.
         </AlertDescription>
       </Alert>
 

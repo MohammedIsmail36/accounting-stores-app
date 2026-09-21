@@ -1,3 +1,6 @@
+import { formatProductDisplay } from "@/lib/product-utils";
+import type { InventoryProductIdentity } from "@/lib/inventory-reconciliation-product-identity";
+
 export type InventoryRepairStatus =
   | "draft"
   | "ready_for_review"
@@ -310,11 +313,14 @@ export function parseInventoryRepairEffect(value: unknown): InventoryRepairEffec
   };
 }
 
-export function inventoryRepairItemLabel(item: InventoryRepairItem) {
+export function inventoryRepairItemLabel(item: InventoryRepairItem, identity?: InventoryProductIdentity) {
   const name = typeof item.beforeState.name === "string" ? item.beforeState.name : null;
   const code = typeof item.beforeState.code === "string" ? item.beforeState.code : null;
-  if (name && code) return `${name} — ${code}`;
-  if (name) return name;
+  const brandName = identity?.brandName
+    ?? (typeof item.beforeState.brand_name === "string" ? item.beforeState.brand_name : null);
+  const modelNumber = identity?.modelNumber
+    ?? (typeof item.beforeState.model_number === "string" ? item.beforeState.model_number : null);
+  if (name) return formatProductDisplay(name, brandName, modelNumber, code);
   if (item.sourceNumber) return item.sourceNumber;
   return item.issueKey;
 }
@@ -380,9 +386,17 @@ const repairTypeByClassification: Record<string, string> = {
   rounding: "post_rounding_adjustment",
 };
 
+export function canPrepareInventoryRepairDraft(row: InventoryRepairDraftDiagnosticRow) {
+  if (!row.canPrepareRepair || row.classification === "matched") return false;
+  if (!repairTypeByClassification[row.classification]) return false;
+  return row.kind === "product"
+    ? row.classification === "product_balance" && Boolean(row.productId)
+    : Boolean(row.sourceKey && row.sourceType && row.sourceId);
+}
+
 export function buildInventoryRepairDraftItem(row: InventoryRepairDraftDiagnosticRow) {
   const repairType = repairTypeByClassification[row.classification];
-  if (!row.canPrepareRepair || !repairType) {
+  if (!canPrepareInventoryRepairDraft(row) || !repairType) {
     throw new Error("هذا الانحراف غير متاح لإعداد مسودة معالجة");
   }
 

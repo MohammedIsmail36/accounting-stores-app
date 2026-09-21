@@ -49,6 +49,9 @@ import {
   type InventoryDocumentPrefixes,
 } from "@/lib/inventory-reconciliation-diagnostic";
 import { notify } from "@/lib/notify";
+import { formatProductDisplay } from "@/lib/product-utils";
+import { canPrepareInventoryRepairDraft } from "@/lib/inventory-reconciliation-repair";
+import { loadInventoryProductIdentities } from "@/lib/inventory-reconciliation-product-identity";
 
 const PAGE_SIZE = 50;
 
@@ -112,7 +115,17 @@ export default function InventoryReconciliationPage() {
           p_expected_fingerprint: expectedFingerprint,
         });
         if (error) throw error;
-        return parseInventoryReconciliationDiagnostic(data);
+        const parsed = parseInventoryReconciliationDiagnostic(data);
+        if (section !== "products") return parsed;
+        const identities = await loadInventoryProductIdentities(
+          parsed.rows.flatMap((row) => row.kind === "product" ? [row.productId] : []),
+        );
+        return {
+          ...parsed,
+          rows: parsed.rows.map((row) => row.kind === "product"
+            ? { ...row, ...identities.get(row.productId) }
+            : row),
+        };
       };
 
       try {
@@ -378,7 +391,12 @@ export default function InventoryReconciliationPage() {
         onOpenChange={(open) => !open && setRepairTarget(null)}
         row={repairTarget}
         rowLabel={repairTarget?.kind === "product"
-          ? `${repairTarget.name} — ${repairTarget.code}`
+          ? formatProductDisplay(
+            repairTarget.name,
+            repairTarget.brandName,
+            repairTarget.modelNumber,
+            repairTarget.code,
+          )
           : repairTarget ? sourceLabel(repairTarget, sourcePrefixes) : ""}
         diagnostic={diagnostic}
       />
@@ -402,7 +420,7 @@ function ProductsTable({
   }
 
   return (
-    <Table>
+    <Table className="[&_th]:h-9 [&_th]:px-3 [&_td]:px-3 [&_td]:py-1.5">
       <TableHeader>
         <TableRow>
           <TableHead>المنتج</TableHead>
@@ -420,8 +438,9 @@ function ProductsTable({
         {rows.map((row) => (
           <TableRow key={row.productId}>
             <TableCell>
-              <div className="font-medium">{row.name}</div>
-              <div className="font-mono text-xs text-muted-foreground">{row.code}</div>
+              <div className="min-w-52 whitespace-nowrap font-medium">
+                {formatProductDisplay(row.name, row.brandName, row.modelNumber, row.code)}
+              </div>
             </TableCell>
             <TableCell className="text-center">{formatNumber(row.cardQuantity)}</TableCell>
             <TableCell className="text-center">{formatNumber(row.movementQuantity)}</TableCell>
@@ -432,13 +451,19 @@ function ProductsTable({
             <TableCell className="text-center">{formatCurrency(row.wacValuation)}</TableCell>
             <TableCell className="text-center text-muted-foreground">{formatCurrency(row.wacToMovementDifference)}</TableCell>
             <TableCell>
-              <Badge variant={classificationVariant(row.classification)}>
-                {inventoryClassificationLabel[row.classification] ?? row.classification}
-              </Badge>
-              {row.reasonCodes.length > 0 && <div className="mt-1 max-w-xs text-xs text-muted-foreground">{rowReasons(row.reasonCodes)}</div>}
+              <div className="flex items-center gap-2 whitespace-nowrap">
+                <Badge variant={classificationVariant(row.classification)}>
+                  {inventoryClassificationLabel[row.classification] ?? row.classification}
+                </Badge>
+                {row.reasonCodes.length > 0 && (
+                  <span className="max-w-40 truncate text-xs text-muted-foreground" title={rowReasons(row.reasonCodes)}>
+                    {rowReasons(row.reasonCodes)}
+                  </span>
+                )}
+              </div>
             </TableCell>
             <TableCell>
-              {row.canPrepareRepair ? (
+              {canPrepareInventoryRepairDraft(row) ? (
                 <Button size="sm" variant="outline" onClick={() => onPrepare(row)}>إعداد مسودة</Button>
               ) : <span className="text-muted-foreground">—</span>}
             </TableCell>
@@ -467,7 +492,7 @@ function SourcesTable({
   }
 
   return (
-    <Table>
+    <Table className="[&_th]:h-9 [&_th]:px-3 [&_td]:px-3 [&_td]:py-1.5">
       <TableHeader>
         <TableRow>
           <TableHead>المصدر</TableHead>
@@ -495,14 +520,16 @@ function SourcesTable({
               )}
             </TableCell>
             <TableCell>
-              <div>{formatDate(row.sourceDate)}</div>
-              <div className="text-xs text-muted-foreground">
+              <div className="flex items-center gap-2 whitespace-nowrap">
+                <span>{formatDate(row.sourceDate)}</span>
+                <span className="text-xs text-muted-foreground">
                 {row.sourceStatus ? inventorySourceStatusLabel[row.sourceStatus] ?? row.sourceStatus : "—"}
+                </span>
               </div>
             </TableCell>
             <TableCell className="text-center">
-              <div>{row.movementCount.toLocaleString("en-US")}</div>
-              <div className="text-xs text-muted-foreground">صافي {formatNumber(row.movementQuantity)}</div>
+              <span className="whitespace-nowrap">{row.movementCount.toLocaleString("en-US")}</span>
+              <span className="mr-2 whitespace-nowrap text-xs text-muted-foreground">صافي {formatNumber(row.movementQuantity)}</span>
             </TableCell>
             <TableCell className="text-center">{formatCurrency(row.movementBookValue)}</TableCell>
             <TableCell className="text-center">{formatCurrency(row.ledger1104Value)}</TableCell>
@@ -512,13 +539,19 @@ function SourcesTable({
               </span>
             </TableCell>
             <TableCell>
-              <Badge variant={classificationVariant(row.classification)}>
-                {inventoryClassificationLabel[row.classification] ?? row.classification}
-              </Badge>
-              {row.reasonCodes.length > 0 && <div className="mt-1 max-w-xs text-xs text-muted-foreground">{rowReasons(row.reasonCodes)}</div>}
+              <div className="flex items-center gap-2 whitespace-nowrap">
+                <Badge variant={classificationVariant(row.classification)}>
+                  {inventoryClassificationLabel[row.classification] ?? row.classification}
+                </Badge>
+                {row.reasonCodes.length > 0 && (
+                  <span className="max-w-40 truncate text-xs text-muted-foreground" title={rowReasons(row.reasonCodes)}>
+                    {rowReasons(row.reasonCodes)}
+                  </span>
+                )}
+              </div>
             </TableCell>
             <TableCell>
-              {row.canPrepareRepair ? (
+              {canPrepareInventoryRepairDraft(row) ? (
                 <Button size="sm" variant="outline" onClick={() => onPrepare(row)}>إعداد مسودة</Button>
               ) : <span className="text-muted-foreground">—</span>}
             </TableCell>

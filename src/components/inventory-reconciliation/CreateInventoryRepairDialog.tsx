@@ -17,6 +17,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
 import {
   buildInventoryRepairDraftItem,
+  canPrepareInventoryRepairDraft,
   inventoryRepairClassificationLabel,
   inventoryRepairTypeLabel,
   parseInventoryRepairCommandResult,
@@ -56,7 +57,9 @@ export function CreateInventoryRepairDialog({
     setRequestId(crypto.randomUUID());
   }, [open, row, rowLabel]);
 
-  const repairItem = row?.canPrepareRepair ? buildInventoryRepairDraftItem(row) : null;
+  const repairItem = row && canPrepareInventoryRepairDraft(row)
+    ? buildInventoryRepairDraftItem(row)
+    : null;
   const repairType = repairItem?.repair_type ?? "";
 
   async function createDraft() {

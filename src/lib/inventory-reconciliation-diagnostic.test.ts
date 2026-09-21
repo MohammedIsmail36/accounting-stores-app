@@ -42,6 +42,8 @@ const payload = {
       product_id: "product-1",
       code: "P-1",
       name: "منتج اختبار",
+      brand_name: "ماركة اختبار",
+      model_number: "M-1",
       is_active: true,
       card_quantity: 10,
       movement_quantity: 10,
@@ -70,6 +72,9 @@ describe("parseInventoryReconciliationDiagnostic", () => {
     expect(result.rows[0]).toMatchObject({
       kind: "product",
       classification: "matched",
+      brandName: "ماركة اختبار",
+      modelNumber: "M-1",
+      canPrepareRepair: false,
       wacToMovementDifference: -5,
     });
   });
@@ -81,6 +86,7 @@ describe("parseInventoryReconciliationDiagnostic", () => {
     expect(row.kind).toBe("product");
     expect(row.classification).toBe("matched");
     expect(result.totals.productIssueCount).toBe(0);
+    expect(row.canPrepareRepair).toBe(false);
   });
 
   it("يرفض قسمًا غير معروف بدل عرض بيانات ملتبسة", () => {

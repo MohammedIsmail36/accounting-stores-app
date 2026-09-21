@@ -41,6 +41,7 @@ import {
   type InventoryRepairActor,
 } from "@/lib/inventory-reconciliation-repair";
 import { isUUID } from "@/lib/route-labels";
+import { loadInventoryProductIdentities, type InventoryProductIdentity } from "@/lib/inventory-reconciliation-product-identity";
 
 const shortId = (value: string) => `${value.slice(0, 8)}…`;
 
@@ -79,6 +80,10 @@ export default function InventoryReconciliationRepairDetailPage() {
       if (!headerResult.data) return null;
 
       const events = (eventsResult.data ?? []).map(parseInventoryRepairEvent);
+      const items = (itemsResult.data ?? []).map(parseInventoryRepairItem);
+      const productIdentities = await loadInventoryProductIdentities(
+        items.flatMap((item) => item.productId ? [item.productId] : []),
+      );
       const actorIds = [...new Set(events.map((event) => event.actorId))];
       const actors: Record<string, InventoryRepairActor> = {};
       if (actorIds.length > 0) {
@@ -98,7 +103,8 @@ export default function InventoryReconciliationRepairDetailPage() {
 
       return {
         repair: parseInventoryRepairDetail(headerResult.data),
-        items: (itemsResult.data ?? []).map(parseInventoryRepairItem),
+        items,
+        productIdentities,
         effects: (effectsResult.data ?? []).map(parseInventoryRepairEffect),
         events,
         actors,
@@ -221,7 +227,7 @@ export default function InventoryReconciliationRepairDetailPage() {
           <TabsTrigger value="effects">آثار التنفيذ ({effects.length})</TabsTrigger>
         </TabsList>
         <TabsContent value="items" className="mt-3">
-          <ItemsTable items={items} formatCurrency={formatCurrency} />
+          <ItemsTable items={items} formatCurrency={formatCurrency} productIdentities={data.productIdentities} />
         </TabsContent>
         <TabsContent value="events" className="mt-3">
           <EventsList events={events} actors={actors} />
@@ -245,17 +251,29 @@ function SummaryCard({ label, value }: { label: string; value: string }) {
   );
 }
 
-function ItemsTable({ items, formatCurrency }: { items: InventoryRepairItem[]; formatCurrency: (value: number) => string }) {
+function ItemsTable({
+  items,
+  formatCurrency,
+  productIdentities,
+}: {
+  items: InventoryRepairItem[];
+  formatCurrency: (value: number) => string;
+  productIdentities: Map<string, InventoryProductIdentity>;
+}) {
   if (items.length === 0) return <EmptyState title="لا توجد بنود" compact />;
   return (
     <div className="overflow-x-auto rounded-md border">
-      <Table>
+      <Table className="[&_th]:h-9 [&_th]:px-3 [&_td]:px-3 [&_td]:py-1.5">
         <TableHeader><TableRow>
-          <TableHead className="w-14">#</TableHead><TableHead>السجل المتأثر</TableHead><TableHead>التشخيص</TableHead>
+          <TableHead className="w-12">#</TableHead><TableHead>نوع السجل</TableHead><TableHead>السجل المتأثر</TableHead><TableHead>التشخيص</TableHead>
           <TableHead>المعالجة المقترحة</TableHead><TableHead>قبل المعالجة</TableHead><TableHead>المقترح</TableHead>
         </TableRow></TableHeader>
         <TableBody>{items.map((item) => {
           const path = getInventoryRepairItemPath(item);
+          const itemLabel = inventoryRepairItemLabel(
+            item,
+            item.productId ? productIdentities.get(item.productId) : undefined,
+          );
           const before = item.axis === "product"
             ? `البطاقة ${formatNumber(item.beforeCardQuantity)} • الحركات ${formatNumber(item.beforeMovementQuantity)}`
             : `الحركات ${formatCurrency(item.beforeMovementBookValue ?? 0)} • 1104 ${formatCurrency(item.beforeLedger1104Value ?? 0)}`;
@@ -266,10 +284,10 @@ function ItemsTable({ items, formatCurrency }: { items: InventoryRepairItem[]; f
               : "بانتظار تحديد المقترح";
           return <TableRow key={item.id}>
             <TableCell className="font-mono">{item.lineNumber}</TableCell>
+            <TableCell><Badge variant="secondary">{inventoryRepairAxisLabel[item.axis]}</Badge></TableCell>
             <TableCell>
-              <Badge variant="secondary" className="mb-1">{inventoryRepairAxisLabel[item.axis]}</Badge>
-              {path ? <Link className="block font-medium text-primary hover:underline" to={path}>{inventoryRepairItemLabel(item)}</Link>
-                : <div className="font-medium">{inventoryRepairItemLabel(item)}</div>}
+              {path ? <Link className="whitespace-nowrap font-medium text-primary hover:underline" to={path}>{itemLabel}</Link>
+                : <div className="font-medium">{itemLabel}</div>}
             </TableCell>
             <TableCell>{inventoryRepairClassificationLabel[item.classification] ?? item.classification}</TableCell>
             <TableCell>{inventoryRepairTypeLabel[item.repairType] ?? item.repairType}</TableCell>

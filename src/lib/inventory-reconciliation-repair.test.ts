@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildInventoryRepairDraftItem,
   buildInventoryRepairUpdateItem,
+  canPrepareInventoryRepairDraft,
   canExecuteInventoryProductCardRepair,
   getInventoryRepairItemPath,
   inventoryRepairNumber,
@@ -84,7 +85,12 @@ describe("inventory reconciliation repair presentation", () => {
       proposed_ledger_1104_value: null,
       result_status: "pending",
       result_message: null,
-      before_state: { name: "منتج اختبار", code: "P-1" },
+      before_state: {
+        name: "منتج اختبار",
+        code: "P-1",
+        brand_name: "ماركة اختبار",
+        model_number: "M-1",
+      },
       proposed_state: { card_quantity: 4 },
     });
     expect(canExecuteInventoryProductCardRepair(repair, [item])).toBe(true);
@@ -120,10 +126,15 @@ describe("inventory reconciliation repair presentation", () => {
       proposed_ledger_1104_value: null,
       result_status: "pending",
       result_message: null,
-      before_state: { name: "منتج اختبار", code: "P-1" },
+      before_state: {
+        name: "منتج اختبار",
+        code: "P-1",
+        brand_name: "ماركة اختبار",
+        model_number: "M-1",
+      },
       proposed_state: { card_quantity: 4 },
     });
-    expect(inventoryRepairItemLabel(item)).toBe("منتج اختبار — P-1");
+    expect(inventoryRepairItemLabel(item)).toBe("[P-1] منتج اختبار - ماركة اختبار - M-1");
     expect(getInventoryRepairItemPath(item)).toBe(`/products/${validRow.id}`);
   });
 
@@ -164,6 +175,12 @@ describe("inventory reconciliation repair presentation", () => {
       canPrepareRepair: false,
       productId: validRow.id,
     })).toThrow("غير متاح");
+    expect(canPrepareInventoryRepairDraft({
+      kind: "product",
+      classification: "matched",
+      canPrepareRepair: true,
+      productId: validRow.id,
+    })).toBe(false);
   });
 
   it("تتحقق من نتيجة أمر إنشاء المسودة", () => {

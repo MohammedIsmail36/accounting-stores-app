@@ -51,4 +51,9 @@ describe("InventoryReconciliationRepairDetailPage boundary", () => {
     expect(source).toContain("نفّذ بواسطة:");
     expect(source).not.toContain("shortId(event.actorId)");
   });
+
+  it("تفصل نوع السجل عن السجل المتأثر داخل جدول البنود", () => {
+    expect(source).toContain("<TableHead>نوع السجل</TableHead><TableHead>السجل المتأثر</TableHead>");
+    expect(source).toContain("inventoryRepairAxisLabel[item.axis]");
+  });
 });

@@ -12,15 +12,22 @@ describe("InventoryReconciliationPage data boundary", () => {
     expect(source).toContain('supabase.rpc("get_inventory_reconciliation_diagnostic"');
   });
 
-  it("لا تجمع المنتجات والحركات داخل المتصفح", () => {
+  it("لا تجمع كميات المنتجات والحركات داخل المتصفح", () => {
     expect(source).not.toContain("fetchAllPaged");
     expect(source).not.toContain('.from("inventory_movements")');
     expect(source).not.toContain('.from("products")');
+    expect(source).toContain("loadInventoryProductIdentities");
   });
 
   it("لا تسمح بمزامنة كمية المنتج أو أي كتابة مباشرة", () => {
     expect(source).not.toContain(".update(");
     expect(source).not.toContain("تأكيد المزامنة");
     expect(source).not.toContain("syncRow");
+  });
+
+  it("تستخدم هوية المنتج المشتركة وتخفي إعداد المسودة عن السجل المطابق", () => {
+    expect(source).toContain("formatProductDisplay(row.name, row.brandName, row.modelNumber, row.code)");
+    expect(source).toContain("canPrepareInventoryRepairDraft(row)");
+    expect(source).not.toContain("row.canPrepareRepair ?");
   });
 });
