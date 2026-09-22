@@ -84,6 +84,36 @@ export interface InventoryRepairActor {
   role: string | null;
 }
 
+export type InventoryJournalPlanMode = "create_full_journal" | "post_delta_journal";
+
+export interface InventoryJournalPlanLine {
+  accountCode: string;
+  debit: number;
+  credit: number;
+}
+
+export interface InventoryJournalPlan {
+  eligible: boolean;
+  reasonCode: string;
+  planFingerprint: string | null;
+  mode: InventoryJournalPlanMode | null;
+  sourceType: string | null;
+  sourceId: string | null;
+  sourceNumber: string | null;
+  sourceStatus: string | null;
+  sourceDate: string | null;
+  accountingDate: string | null;
+  originalJournalEntryId: string | null;
+  journalStatus: string | null;
+  movementCount: number | null;
+  movementBookValue: number | null;
+  expectedLines: InventoryJournalPlanLine[];
+  actualLines: InventoryJournalPlanLine[];
+  correctionLines: InventoryJournalPlanLine[];
+  targetLedger1104Value: number | null;
+  unexpectedAccountCodes: string[];
+}
+
 export const inventoryRepairStatusLabel: Record<InventoryRepairStatus, string> = {
   draft: "مسودة",
   ready_for_review: "بانتظار المراجعة",
@@ -122,6 +152,31 @@ export const inventoryRepairTypeLabel: Record<string, string> = {
   create_linked_inventory_adjustment: "إنشاء تسوية مخزون مرتبطة",
   post_rounding_adjustment: "إثبات فرق التقريب",
   manual_review: "مراجعة يدوية",
+};
+
+export const inventoryJournalPlanModeLabel: Record<InventoryJournalPlanMode, string> = {
+  create_full_journal: "إنشاء القيد الكامل المفقود",
+  post_delta_journal: "إنشاء قيد بالفرق فقط",
+};
+
+export const inventoryJournalPlanReasonLabel: Record<string, string> = {
+  READY: "الخطة جاهزة",
+  ACCOUNTING_DATE_REQUIRED: "اختر تاريخًا محاسبيًا داخل فترة مفتوحة",
+  ACCOUNTING_DATE_LOCKED: "التاريخ المحاسبي المحدد يقع داخل فترة مقفلة",
+  SOURCE_NOT_FOUND: "المستند غير موجود",
+  SOURCE_NOT_POSTED: "المستند غير مرحّل",
+  SOURCE_TYPE_NOT_SUPPORTED: "نوع المستند غير مدعوم",
+  MOVEMENT_EVIDENCE_INVALID: "حركات المخزون غير كافية لبناء القيد",
+  JOURNAL_DRAFT_REQUIRES_REVIEW: "يوجد قيد مسودة يحتاج إلى مراجعة يدوية",
+  JOURNAL_UNBALANCED_REQUIRES_REVIEW: "القيد الحالي غير متوازن ويحتاج إلى مراجعة",
+  SOURCE_TOTALS_INVALID: "إجماليات المستند غير صالحة لبناء القيد",
+  SOURCE_VALUE_MISMATCH: "قيمة المصدر لا تطابق أثر المخزون",
+  ACCOUNT_MAPPING_MISSING: "حساب مطلوب غير موجود في دليل الحسابات",
+  ACCOUNT_MAPPING_INVALID: "هوية أحد حسابات النظام غير صحيحة",
+  TAX_ACCOUNT_MAPPING_INVALID: "حساب الضريبة المطلوب غير صحيح",
+  UNEXPECTED_ACCOUNT_DELTA: "الفرق يتضمن حسابًا غير متوقع",
+  CORRECTION_NOT_BALANCED: "القيد المقترح غير متوازن",
+  NO_CORRECTION_REQUIRED: "لا يوجد فرق يحتاج إلى قيد تصحيحي",
 };
 
 export const inventoryRepairEventLabel: Record<string, string> = {
@@ -230,6 +285,139 @@ export function canExecuteInventoryProductCardRepair(
       && item.proposedCardQuantity !== null
       && item.resultStatus === "pending"
     ));
+}
+
+const nullablePlanNumber = (value: unknown) => {
+  if (value === null || value === undefined) return null;
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) throw new Error("خطة قيد تسوية المخزون غير صالحة");
+  return parsed;
+};
+
+function parseInventoryJournalPlanLines(value: unknown): InventoryJournalPlanLine[] {
+  if (value === null || value === undefined) return [];
+  if (!Array.isArray(value)) throw new Error("خطة قيد تسوية المخزون غير صالحة");
+  return value.map((entry) => {
+    const line = objectValue(entry);
+    const accountCode = requiredText(line.account_code);
+    const debit = Number(line.debit ?? 0);
+    const credit = Number(line.credit ?? 0);
+    if (!Number.isFinite(debit) || !Number.isFinite(credit) || debit < 0 || credit < 0) {
+      throw new Error("خطة قيد تسوية المخزون غير صالحة");
+    }
+    return { accountCode, debit, credit };
+  });
+}
+
+export function parseInventoryJournalPlan(value: unknown): InventoryJournalPlan {
+  const row = objectValue(value);
+  if (typeof row.eligible !== "boolean") {
+    throw new Error("خطة قيد تسوية المخزون غير صالحة");
+  }
+  const modeValue = nullableText(row.mode);
+  if (modeValue && modeValue !== "create_full_journal" && modeValue !== "post_delta_journal") {
+    throw new Error("خطة قيد تسوية المخزون غير صالحة");
+  }
+  const unexpectedAccountCodes = row.unexpected_account_codes ?? [];
+  if (!Array.isArray(unexpectedAccountCodes)
+      || unexpectedAccountCodes.some((code) => typeof code !== "string")) {
+    throw new Error("خطة قيد تسوية المخزون غير صالحة");
+  }
+  return {
+    eligible: row.eligible,
+    reasonCode: requiredText(row.reason_code),
+    planFingerprint: nullableText(row.plan_fingerprint),
+    mode: modeValue as InventoryJournalPlanMode | null,
+    sourceType: nullableText(row.source_type),
+    sourceId: nullableText(row.source_id),
+    sourceNumber: nullableText(row.source_number),
+    sourceStatus: nullableText(row.source_status),
+    sourceDate: nullableText(row.source_date),
+    accountingDate: nullableText(row.accounting_date),
+    originalJournalEntryId: nullableText(row.original_journal_entry_id),
+    journalStatus: nullableText(row.journal_status),
+    movementCount: nullablePlanNumber(row.movement_count),
+    movementBookValue: nullablePlanNumber(row.movement_book_value),
+    expectedLines: parseInventoryJournalPlanLines(row.expected_lines),
+    actualLines: parseInventoryJournalPlanLines(row.actual_lines),
+    correctionLines: parseInventoryJournalPlanLines(row.correction_lines),
+    targetLedger1104Value: nullablePlanNumber(row.target_ledger_1104_value),
+    unexpectedAccountCodes: unexpectedAccountCodes as string[],
+  };
+}
+
+export function parseStoredInventoryJournalPlan(item: InventoryRepairItem): InventoryJournalPlan {
+  const plan = parseInventoryJournalPlan({
+    eligible: true,
+    reason_code: "READY",
+    plan_fingerprint: item.proposedState.plan_fingerprint,
+    mode: item.proposedState.mode,
+    source_type: item.sourceType,
+    source_id: item.sourceId,
+    source_number: item.sourceNumber,
+    source_status: item.beforeState.source_status ?? null,
+    source_date: item.beforeState.source_date ?? null,
+    accounting_date: item.proposedState.accounting_date,
+    original_journal_entry_id: item.originalJournalEntryId,
+    journal_status: item.beforeState.journal_status ?? null,
+    movement_count: item.beforeState.movement_count ?? null,
+    movement_book_value: item.beforeMovementBookValue,
+    expected_lines: [],
+    actual_lines: [],
+    correction_lines: item.proposedState.correction_lines,
+    target_ledger_1104_value: item.proposedLedger1104Value,
+    unexpected_account_codes: [],
+  });
+  if (!plan.planFingerprint || !plan.mode || !plan.accountingDate || plan.correctionLines.length === 0) {
+    throw new Error("خطة القيد المثبتة في المعالجة غير مكتملة");
+  }
+  return plan;
+}
+
+const comparablePlanLines = (lines: InventoryJournalPlanLine[]) => lines.map((line) => ({
+  accountCode: line.accountCode,
+  debit: Number(line.debit.toFixed(2)),
+  credit: Number(line.credit.toFixed(2)),
+}));
+
+export function inventoryJournalPlanMatchesStoredState(
+  plan: InventoryJournalPlan,
+  item: InventoryRepairItem,
+) {
+  let stored: InventoryJournalPlan;
+  try {
+    stored = parseStoredInventoryJournalPlan(item);
+  } catch {
+    return false;
+  }
+  return plan.eligible
+    && plan.reasonCode === "READY"
+    && plan.planFingerprint === stored.planFingerprint
+    && plan.mode === stored.mode
+    && plan.accountingDate === stored.accountingDate
+    && JSON.stringify(comparablePlanLines(plan.correctionLines))
+      === JSON.stringify(comparablePlanLines(stored.correctionLines));
+}
+
+export function canExecuteInventoryMissingJournalRepair(
+  repair: InventoryRepairDetail,
+  items: InventoryRepairItem[],
+) {
+  if (repair.status !== "approved" || items.length === 0) return false;
+  return items.every((item) => {
+    if (item.axis !== "source"
+        || item.classification !== "movement_without_journal"
+        || item.repairType !== "create_missing_inventory_journal"
+        || !item.sourceType
+        || !item.sourceId
+        || item.resultStatus !== "pending") return false;
+    try {
+      parseStoredInventoryJournalPlan(item);
+      return true;
+    } catch {
+      return false;
+    }
+  });
 }
 
 export function parseInventoryRepairDetail(value: unknown): InventoryRepairDetail {

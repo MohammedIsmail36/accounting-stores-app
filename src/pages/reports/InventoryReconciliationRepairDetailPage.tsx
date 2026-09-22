@@ -7,6 +7,7 @@ import { PageHeader } from "@/components/PageHeader";
 import { ApproveInventoryRepairDialog } from "@/components/inventory-reconciliation/ApproveInventoryRepairDialog";
 import { EditInventoryRepairDraftDialog } from "@/components/inventory-reconciliation/EditInventoryRepairDraftDialog";
 import { ExecuteInventoryRepairDialog } from "@/components/inventory-reconciliation/ExecuteInventoryRepairDialog";
+import { InventoryJournalPlanPreview } from "@/components/inventory-reconciliation/InventoryJournalPlanPreview";
 import { SubmitInventoryRepairDraftDialog } from "@/components/inventory-reconciliation/SubmitInventoryRepairDraftDialog";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -21,6 +22,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { formatDate, formatDateTime, formatNumber } from "@/lib/format";
 import {
   getInventoryRepairItemPath,
+  canExecuteInventoryMissingJournalRepair,
   canExecuteInventoryProductCardRepair,
   inventoryRepairAxisLabel,
   inventoryRepairActorLabel,
@@ -35,6 +37,7 @@ import {
   parseInventoryRepairEffect,
   parseInventoryRepairEvent,
   parseInventoryRepairItem,
+  parseStoredInventoryJournalPlan,
   type InventoryRepairEffect,
   type InventoryRepairEvent,
   type InventoryRepairItem,
@@ -127,6 +130,15 @@ export default function InventoryReconciliationRepairDetailPage() {
 
   const { repair, items, effects, events } = data;
   const productCardExecutionAvailable = canExecuteInventoryProductCardRepair(repair, items);
+  const journalExecutionAvailable = canExecuteInventoryMissingJournalRepair(repair, items);
+  const storedJournalPlans = items.flatMap((item) => {
+    if (item.repairType !== "create_missing_inventory_journal") return [];
+    try {
+      return [{ item, plan: parseStoredInventoryJournalPlan(item) }];
+    } catch {
+      return [];
+    }
+  });
   const actors = { ...data.actors };
   if (user) {
     actors[user.id] = {
@@ -162,6 +174,9 @@ export default function InventoryReconciliationRepairDetailPage() {
             {productCardExecutionAvailable && role === "admin" && user && (
               <ExecuteInventoryRepairDialog repair={repair} items={items} />
             )}
+            {journalExecutionAvailable && role === "admin" && user && (
+              <ExecuteInventoryRepairDialog repair={repair} items={items} />
+            )}
             <Button asChild variant="outline">
               <Link to="/reports/inventory-reconciliation/repairs">
                 <ArrowRight className="ml-2 h-4 w-4" />
@@ -193,12 +208,20 @@ export default function InventoryReconciliationRepairDetailPage() {
             التنفيذ متاح للمدير فقط، ويعيد فحص البطاقة والحركات قبل تعديل الكمية دون إنشاء حركة أو قيد جديد.
           </AlertDescription>
         </Alert>
+      ) : journalExecutionAvailable ? (
+        <Alert className="border-amber-200 bg-amber-50/60 dark:border-amber-900 dark:bg-amber-950/20">
+          <Info className="h-4 w-4 text-amber-700" />
+          <AlertTitle>خطة القيد التصحيحي جاهزة للتنفيذ</AlertTitle>
+          <AlertDescription>
+            التنفيذ متاح للمدير فقط، ويعيد فحص المستند والحركات والخطة قبل إنشاء قيد مرحّل جديد دون تعديل القيد الأصلي.
+          </AlertDescription>
+        </Alert>
       ) : (
         <Alert className="border-slate-200 bg-slate-50/60 dark:border-slate-800 dark:bg-slate-950/20">
           <Info className="h-4 w-4 text-slate-600" />
           <AlertTitle>لا يوجد تنفيذ متاح لهذه المعالجة</AlertTitle>
           <AlertDescription>
-            التنفيذ مفعّل حاليًا لإعادة بناء بطاقة المنتج المعتمدة فقط؛ بقية الأنواع تظل للعرض والمراجعة دون أثر.
+            لا يطابق هذا السجل أحد منفذي المعالجة المعتمدين أو لم يصل إلى حالة الاعتماد بعد.
           </AlertDescription>
         </Alert>
       )}
@@ -219,6 +242,18 @@ export default function InventoryReconciliationRepairDetailPage() {
           </div>
         </CardContent>
       </Card>
+
+      {storedJournalPlans.length > 0 && (
+        <div className="space-y-3">
+          {storedJournalPlans.map(({ item, plan }) => (
+            <InventoryJournalPlanPreview
+              key={item.id}
+              plan={plan}
+              sourceLabel={inventoryRepairItemLabel(item)}
+            />
+          ))}
+        </div>
+      )}
 
       <Tabs defaultValue="items" dir="rtl">
         <TabsList className="w-full justify-start overflow-x-auto">

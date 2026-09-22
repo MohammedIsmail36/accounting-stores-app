@@ -18,4 +18,13 @@ describe("CreateInventoryRepairDialog boundary", () => {
     expect(source).not.toContain("execute_inventory_reconciliation_repair");
     expect(source).not.toContain(".from(");
   });
+
+  it("تعرض خطة القيد الخادمية وتطلب تاريخًا محاسبيًا عند الحاجة", () => {
+    expect(source).toContain('supabase.rpc("get_inventory_reconciliation_journal_plan"');
+    expect(source).toContain("parseInventoryJournalPlan");
+    expect(source).toContain("InventoryJournalPlanPreview");
+    expect(source).toContain('type="date"');
+    expect(source).toContain("ACCOUNTING_DATE_REQUIRED");
+    expect(source).toContain("accounting_date: accountingDate");
+  });
 });

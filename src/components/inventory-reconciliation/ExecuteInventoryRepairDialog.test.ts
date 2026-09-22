@@ -24,14 +24,17 @@ describe("ExecuteInventoryRepairDialog boundary", () => {
 
   it("يتطلب رقم المعالجة كتأكيد صريح قبل التنفيذ", () => {
     expect(source).toContain("confirmation.trim() === repairNumber");
-    expect(source).toContain("confirmDisabled={!requestId || !confirmationMatches}");
+    expect(source).toContain("confirmDisabled={!requestId || !confirmationMatches || planLoading || !executionReady}");
     expect(source).toContain("تحقق نهائي قبل التنفيذ");
   });
 
-  it("يقبل نوع إعادة البطاقة فقط ولا يكتب مباشرة في الجداول", () => {
+  it("يقبل إعادة البطاقة والقيد المفقود فقط ولا يكتب مباشرة في الجداول", () => {
     expect(source).toContain("canExecuteInventoryProductCardRepair(repair, items)");
+    expect(source).toContain("canExecuteInventoryMissingJournalRepair(repair, items)");
+    expect(source).toContain('supabase.rpc("get_inventory_reconciliation_journal_plan"');
+    expect(source).toContain("inventoryJournalPlanMatchesStoredState");
+    expect(source).toContain("InventoryJournalPlanPreview");
     expect(source).not.toContain(".from(");
-    expect(source).not.toContain("create_missing_inventory_journal");
     expect(source).not.toContain("post_rounding_adjustment");
   });
 });

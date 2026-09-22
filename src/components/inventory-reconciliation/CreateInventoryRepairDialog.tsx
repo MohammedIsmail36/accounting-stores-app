@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Loader2, ShieldCheck } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { InventoryJournalPlanPreview } from "@/components/inventory-reconciliation/InventoryJournalPlanPreview";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -19,8 +21,11 @@ import {
   buildInventoryRepairDraftItem,
   canPrepareInventoryRepairDraft,
   inventoryRepairClassificationLabel,
+  inventoryJournalPlanReasonLabel,
   inventoryRepairTypeLabel,
   parseInventoryRepairCommandResult,
+  parseInventoryJournalPlan,
+  type InventoryJournalPlan,
 } from "@/lib/inventory-reconciliation-repair";
 import { notify } from "@/lib/notify";
 import type {
@@ -49,18 +54,52 @@ export function CreateInventoryRepairDialog({
   const [explanation, setExplanation] = useState("");
   const [requestId, setRequestId] = useState("");
   const [saving, setSaving] = useState(false);
+  const [accountingDate, setAccountingDate] = useState("");
+  const [journalPlan, setJournalPlan] = useState<InventoryJournalPlan | null>(null);
+  const [planLoading, setPlanLoading] = useState(false);
+  const [planError, setPlanError] = useState("");
 
   useEffect(() => {
     if (!open || !row) return;
     setTitle(`معالجة ${rowLabel}`.slice(0, 120));
     setExplanation("");
     setRequestId(crypto.randomUUID());
+    setAccountingDate("");
+    setJournalPlan(null);
+    setPlanError("");
   }, [open, row, rowLabel]);
 
   const repairItem = row && canPrepareInventoryRepairDraft(row)
     ? buildInventoryRepairDraftItem(row)
     : null;
   const repairType = repairItem?.repair_type ?? "";
+  const requiresJournalPlan = repairType === "create_missing_inventory_journal"
+    && row?.kind === "source";
+  const journalPlanReady = !requiresJournalPlan
+    || (journalPlan?.eligible === true && journalPlan.reasonCode === "READY");
+
+  useEffect(() => {
+    if (!open || !requiresJournalPlan || !row || row.kind !== "source") return;
+    let active = true;
+    setPlanLoading(true);
+    setPlanError("");
+    void supabase.rpc("get_inventory_reconciliation_journal_plan" as never, {
+      p_source_type: row.sourceType,
+      p_source_id: row.sourceId,
+      p_accounting_date: accountingDate || null,
+    } as never).then(({ data, error }) => {
+      if (!active) return;
+      if (error) throw error;
+      setJournalPlan(parseInventoryJournalPlan(data));
+    }).catch((error: unknown) => {
+      if (!active) return;
+      setJournalPlan(null);
+      setPlanError(error instanceof Error ? error.message : "تعذر قراءة خطة القيد من الخادم");
+    }).finally(() => {
+      if (active) setPlanLoading(false);
+    });
+    return () => { active = false; };
+  }, [accountingDate, open, requiresJournalPlan, row]);
 
   async function createDraft() {
     const trimmedTitle = title.trim();
@@ -77,6 +116,17 @@ export function CreateInventoryRepairDialog({
       notify.error("سبب المعالجة مطلوب", "اشرح سبب إعداد المسودة وما الذي يحتاج إلى مراجعة.");
       return;
     }
+    if (!journalPlanReady) {
+      notify.error("خطة القيد غير جاهزة", "راجع سبب رفض الخطة أو اختر تاريخًا محاسبيًا مفتوحًا أولًا.");
+      return;
+    }
+
+    const draftItem = requiresJournalPlan
+      ? {
+        ...repairItem,
+        proposed_state: accountingDate ? { accounting_date: accountingDate } : {},
+      }
+      : repairItem;
 
     setSaving(true);
     try {
@@ -86,7 +136,7 @@ export function CreateInventoryRepairDialog({
         p_diagnostic_fingerprint: diagnostic.fingerprint,
         p_diagnostic_snapshot_at: diagnostic.snapshotAt,
         p_source_scope: diagnostic.sourceScope,
-        p_items: [repairItem],
+        p_items: [draftItem],
         p_request_id: requestId,
       } as never);
       if (error) throw error;
@@ -104,7 +154,7 @@ export function CreateInventoryRepairDialog({
 
   return (
     <Dialog open={open} onOpenChange={(next) => !saving && onOpenChange(next)}>
-      <DialogContent className="sm:max-w-xl" dir="rtl">
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl" dir="rtl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <ShieldCheck className="h-5 w-5 text-primary" />
@@ -122,6 +172,41 @@ export function CreateInventoryRepairDialog({
               التشخيص: {inventoryRepairClassificationLabel[row.classification] ?? row.classification}
               {repairType ? ` • المقترح: ${inventoryRepairTypeLabel[repairType] ?? repairType}` : ""}
             </div>
+          </div>
+        )}
+
+        {requiresJournalPlan && (
+          <div className="space-y-3">
+            {planLoading && (
+              <div className="flex items-center gap-2 rounded-md border px-3 py-4 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                جارٍ بناء خطة القيد من المستند والحركات…
+              </div>
+            )}
+            {planError && (
+              <Alert variant="destructive">
+                <AlertTitle>تعذر قراءة خطة القيد</AlertTitle>
+                <AlertDescription>{planError}</AlertDescription>
+              </Alert>
+            )}
+            {journalPlan?.reasonCode === "ACCOUNTING_DATE_REQUIRED" && (
+              <div className="space-y-1.5 rounded-md border border-amber-200 bg-amber-50/60 p-3 dark:border-amber-900 dark:bg-amber-950/20">
+                <Label htmlFor="repair-accounting-date">التاريخ المحاسبي في فترة مفتوحة</Label>
+                <Input
+                  id="repair-accounting-date"
+                  type="date"
+                  value={accountingDate}
+                  onChange={(event) => setAccountingDate(event.target.value)}
+                  disabled={saving || planLoading}
+                />
+                <p className="text-xs text-muted-foreground">
+                  {inventoryJournalPlanReasonLabel.ACCOUNTING_DATE_REQUIRED}
+                </p>
+              </div>
+            )}
+            {journalPlan && journalPlan.reasonCode !== "ACCOUNTING_DATE_REQUIRED" && (
+              <InventoryJournalPlanPreview plan={journalPlan} sourceLabel={rowLabel} />
+            )}
           </div>
         )}
 
@@ -153,7 +238,10 @@ export function CreateInventoryRepairDialog({
 
         <DialogFooter className="gap-2">
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>إلغاء</Button>
-          <Button onClick={() => void createDraft()} disabled={saving || !title.trim() || !explanation.trim()}>
+          <Button
+            onClick={() => void createDraft()}
+            disabled={saving || planLoading || !journalPlanReady || !title.trim() || !explanation.trim()}
+          >
             {saving && <Loader2 className="ml-2 h-4 w-4 animate-spin" />}
             إنشاء المسودة فقط
           </Button>

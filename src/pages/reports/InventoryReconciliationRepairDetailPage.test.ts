@@ -45,6 +45,13 @@ describe("InventoryReconciliationRepairDetailPage boundary", () => {
     expect(source).toContain('productCardExecutionAvailable && role === "admin" && user');
   });
 
+  it("تعرض خطة القيد المخزنة وتمكّن منفذ القيد المفقود للمدير فقط", () => {
+    expect(source).toContain("canExecuteInventoryMissingJournalRepair(repair, items)");
+    expect(source).toContain("parseStoredInventoryJournalPlan");
+    expect(source).toContain("InventoryJournalPlanPreview");
+    expect(source).toContain("journalExecutionAvailable");
+  });
+
   it("تعرض منفذ الحدث باسمه ودوره دون UUID أو طلب لكل حدث", () => {
     expect(source).toContain('supabase.from("profiles").select("id, full_name").in("id", actorIds)');
     expect(source).toContain('supabase.from("user_roles").select("user_id, role").in("user_id", actorIds)');

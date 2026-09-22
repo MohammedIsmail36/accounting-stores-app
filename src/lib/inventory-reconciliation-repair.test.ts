@@ -3,6 +3,7 @@ import {
   buildInventoryRepairDraftItem,
   buildInventoryRepairUpdateItem,
   canPrepareInventoryRepairDraft,
+  canExecuteInventoryMissingJournalRepair,
   canExecuteInventoryProductCardRepair,
   getInventoryRepairItemPath,
   inventoryRepairNumber,
@@ -12,6 +13,9 @@ import {
   parseInventoryRepairEvent,
   parseInventoryRepairItem,
   parseInventoryRepairCommandResult,
+  parseInventoryJournalPlan,
+  parseStoredInventoryJournalPlan,
+  inventoryJournalPlanMatchesStoredState,
   parseInventoryRepairListRow,
 } from "./inventory-reconciliation-repair";
 
@@ -96,6 +100,81 @@ describe("inventory reconciliation repair presentation", () => {
     expect(canExecuteInventoryProductCardRepair(repair, [item])).toBe(true);
     expect(canExecuteInventoryProductCardRepair(repair, [{ ...item, repairType: "post_rounding_adjustment" }])).toBe(false);
     expect(canExecuteInventoryProductCardRepair({ ...repair, status: "executed" }, [item])).toBe(false);
+  });
+
+  it("تحلل خطة القيد وتطابقها مع الخطة المثبتة في بند معتمد", () => {
+    const rawPlan = {
+      eligible: true,
+      reason_code: "READY",
+      plan_fingerprint: "plan-1",
+      mode: "create_full_journal",
+      source_type: "purchase_invoice",
+      source_id: validRow.id,
+      source_number: "31",
+      source_status: "posted",
+      source_date: "2026-09-08",
+      accounting_date: "2026-09-22",
+      original_journal_entry_id: null,
+      journal_status: null,
+      movement_count: 2,
+      movement_book_value: 100,
+      expected_lines: [],
+      actual_lines: [],
+      correction_lines: [
+        { account_code: "1104", debit: 100, credit: 0 },
+        { account_code: "2101", debit: 0, credit: 100 },
+      ],
+      target_ledger_1104_value: 100,
+      unexpected_account_codes: [],
+    };
+    const plan = parseInventoryJournalPlan(rawPlan);
+    const repair = {
+      ...parseInventoryRepairListRow({ ...validRow, status: "approved", version: 3 }),
+      diagnosticFingerprint: "fingerprint",
+      diagnosticSnapshotAt: validRow.updated_at,
+      sourceScope: "all_recorded_stock_effects",
+      accountingDate: "2026-09-22",
+      separationOverrideReason: null,
+      preparedBy: validRow.id,
+      submittedBy: validRow.id,
+      approvedBy: validRow.id,
+      executedBy: null,
+      cancelledBy: null,
+      cancellationReason: null,
+    };
+    const item = parseInventoryRepairItem({
+      id: validRow.id,
+      line_number: 1,
+      axis: "source",
+      issue_key: `purchase_invoice:${validRow.id}`,
+      classification: "movement_without_journal",
+      repair_type: "create_missing_inventory_journal",
+      product_id: null,
+      source_type: "purchase_invoice",
+      source_id: validRow.id,
+      source_number: "31",
+      original_journal_entry_id: null,
+      before_card_quantity: null,
+      before_movement_quantity: 2,
+      before_movement_book_value: 100,
+      before_ledger_1104_value: 0,
+      proposed_card_quantity: null,
+      proposed_movement_book_value: null,
+      proposed_ledger_1104_value: 100,
+      result_status: "pending",
+      result_message: null,
+      before_state: {},
+      proposed_state: {
+        plan_fingerprint: "plan-1",
+        mode: "create_full_journal",
+        accounting_date: "2026-09-22",
+        correction_lines: rawPlan.correction_lines,
+      },
+    });
+    expect(parseStoredInventoryJournalPlan(item)).toMatchObject({ planFingerprint: "plan-1" });
+    expect(inventoryJournalPlanMatchesStoredState(plan, item)).toBe(true);
+    expect(canExecuteInventoryMissingJournalRepair(repair, [item])).toBe(true);
+    expect(inventoryJournalPlanMatchesStoredState({ ...plan, planFingerprint: "changed" }, item)).toBe(false);
   });
 
   it("تعرض منفذ الحدث باسمه ودوره دون كشف المعرّف الداخلي", () => {
