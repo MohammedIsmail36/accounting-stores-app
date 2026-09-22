@@ -1,11 +1,15 @@
 // TDD الأحمر لمخطط 2D داخل حاوية L3 المعزولة فقط.
-import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { chownSync, existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { assertIsolation, container, database } from "./rehearse-public-restore.mjs";
 
 const root = fileURLToPath(new URL("../../", import.meta.url));
+const systemAccountsMigrationPath = join(
+  root,
+  "supabase/migrations/20260921213000_inventory_reconciliation_system_accounts.sql",
+);
 const contractPath = join(
   root,
   "supabase/tests/inventory_reconciliation_missing_journal_plan_contract.sql",
@@ -40,7 +44,7 @@ export function validateMissingJournalPlanContract(sql) {
       throw new Error(`حاجز أو شرط مفقود من عقد مخطط 2D: ${required}`);
     }
   }
-  for (let index = 1; index <= 16; index += 1) {
+  for (let index = 1; index <= 18; index += 1) {
     const label = `Scenario ${String(index).padStart(2, "0")}`;
     if (!sql.includes(label)) throw new Error(`سيناريو 2D مفقود: ${label}`);
   }
@@ -69,6 +73,7 @@ export function validateMissingJournalPlanMigration(sql) {
     "UNEXPECTED_ACCOUNT_DELTA",
     "ACCOUNTING_DATE_REQUIRED",
     "plan_fingerprint",
+    "invalid_account_codes",
     "REVOKE ALL ON FUNCTION",
   ]) {
     if (!sql.includes(required)) {
@@ -135,6 +140,15 @@ function psql(query) {
     "-d", database, "-X", "-q", "-A", "-t", "-v", "ON_ERROR_STOP=1",
     "-f", "-",
   ], query);
+}
+
+function writeDiagnostic(path, message) {
+  writeFileSync(path, `${message}\n`, { mode: 0o600 });
+  const uid = Number(process.env.SUDO_UID);
+  const gid = Number(process.env.SUDO_GID);
+  if (Number.isSafeInteger(uid) && uid >= 0 && Number.isSafeInteger(gid) && gid >= 0) {
+    chownSync(path, uid, gid);
+  }
 }
 
 const businessStateSql = `SELECT jsonb_build_object(
@@ -228,6 +242,7 @@ ROLLBACK;`);
     throw new Error("Migration أو ملف رجوع مخطط 2D غير موجود");
   }
   const migration = readFileSync(migrationPath, "utf8");
+  const systemAccountsMigration = readFileSync(systemAccountsMigrationPath, "utf8");
   const rollback = readFileSync(rollbackPath, "utf8");
   validateMissingJournalPlanMigration(migration);
   validateMissingJournalPlanRollback(rollback);
@@ -239,6 +254,7 @@ ROLLBACK;`);
     try {
       output = psql(`\\set ON_ERROR_STOP on
 BEGIN;
+${systemAccountsMigration}
 ${migration}
 SELECT set_config(
   'app.inventory_missing_journal_plan_rollback_authorized',
@@ -255,7 +271,7 @@ $verify$;
 SELECT 'INVENTORY_MISSING_JOURNAL_PLAN_EXPLICIT_ROLLBACK_OK';
 ROLLBACK;`);
     } catch (error) {
-      writeFileSync(logPath, `${error.message}\n`, { mode: 0o600 });
+      writeDiagnostic(logPath, error.message);
       throw new Error(`فشل اختبار ملف رجوع مخطط 2D؛ التشخيص المحمي: ${logPath}`);
     }
     const after = psql(businessStateSql);
@@ -289,10 +305,11 @@ ROLLBACK;`);
   try {
     output = psql(`\\set ON_ERROR_STOP on
 BEGIN;
+${systemAccountsMigration}
 ${migration}
 ${contractBody}`);
   } catch (error) {
-    writeFileSync(logPath, `${error.message}\n`, { mode: 0o600 });
+    writeDiagnostic(logPath, error.message);
     throw new Error(`فشل اختبار Migration مخطط 2D؛ التشخيص المحمي: ${logPath}`);
   }
   const after = psql(businessStateSql);
@@ -310,13 +327,13 @@ ${contractBody}`);
     database,
     migration: migrationPath,
     rollback: rollbackPath,
-    scenarios: 16,
+    scenarios: 18,
     plannerReadOnly: true,
     migrationRolledBack: true,
     isolatedBusinessStatePreserved: true,
     productionOrHostedStagingModified: false,
   }, null, 2)}\n`, { mode: 0o600 });
-  console.log("نجحت Migration مخطط 2D للقراءة فقط في السيناريوهات الستة عشر داخل L3 المعزولة");
+  console.log("نجحت Migration مخطط 2D للقراءة فقط في السيناريوهات الثمانية عشر داخل L3 المعزولة");
   console.log("تم الرجوع عن الدالة والعينات بالكامل؛ لم تتغير L3 أو Staging أو الإنتاج");
   console.log(`التقرير: ${reportPath}`);
 }

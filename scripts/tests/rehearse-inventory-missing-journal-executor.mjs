@@ -1,11 +1,13 @@
 // TDD الأحمر لمنفذ 2D-B داخل حاوية L3 المعزولة فقط.
-import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { chownSync, existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { assertIsolation, container, database } from "./rehearse-public-restore.mjs";
 
 const root = fileURLToPath(new URL("../../", import.meta.url));
+const systemAccountsMigrationPath = join(root,
+  "supabase/migrations/20260921213000_inventory_reconciliation_system_accounts.sql");
 const contractPath = join(root,
   "supabase/tests/inventory_reconciliation_missing_journal_executor_contract.sql");
 const diagnosticMigrationPath = join(root,
@@ -119,6 +121,15 @@ function psql(query) {
   ], query);
 }
 
+function writeDiagnostic(path, message) {
+  writeFileSync(path, `${message}\n`, { mode: 0o600 });
+  const uid = Number(process.env.SUDO_UID);
+  const gid = Number(process.env.SUDO_GID);
+  if (Number.isSafeInteger(uid) && uid >= 0 && Number.isSafeInteger(gid) && gid >= 0) {
+    chownSync(path, uid, gid);
+  }
+}
+
 const businessStateSql = `SELECT jsonb_build_object(
   'products', (SELECT jsonb_build_object('count', count(*), 'signature',
     md5(COALESCE(string_agg(to_jsonb(p)::text, '|' ORDER BY p.id), ''))) FROM public.products p),
@@ -171,6 +182,7 @@ function main() {
   const lifecycleMigration = readFileSync(lifecycleMigrationPath, "utf8");
   const rebuildMigration = readFileSync(rebuildMigrationPath, "utf8");
   const plannerMigration = readFileSync(plannerMigrationPath, "utf8");
+  const systemAccountsMigration = readFileSync(systemAccountsMigrationPath, "utf8");
 
   if (mode === "--test-explicit-rollback") {
     const executorMigration = readFileSync(executorMigrationPath, "utf8");
@@ -186,6 +198,7 @@ BEGIN;
 ${diagnosticMigration}
 ${lifecycleMigration}
 ${rebuildMigration}
+${systemAccountsMigration}
 ${plannerMigration}
 ${executorMigration}
 SELECT set_config('app.inventory_missing_journal_executor_rollback_authorized', 'STAGING_20260921233000', true);
@@ -207,7 +220,7 @@ $verify$;
 SELECT 'INVENTORY_MISSING_JOURNAL_EXECUTOR_EXPLICIT_ROLLBACK_OK';
 ROLLBACK;`);
     } catch (error) {
-      writeFileSync(logPath, `${error.message}\n`, { mode: 0o600 });
+      writeDiagnostic(logPath, error.message);
       throw new Error(`فشل اختبار ملف رجوع منفذ 2D-B؛ التشخيص المحمي: ${logPath}`);
     }
     const after = psql(businessStateSql);
@@ -246,11 +259,12 @@ BEGIN;
 ${diagnosticMigration}
 ${lifecycleMigration}
 ${rebuildMigration}
+${systemAccountsMigration}
 ${plannerMigration}
 ${executorMigration}
 ${contractBody}`);
     } catch (error) {
-      writeFileSync(logPath, `${error.message}\n`, { mode: 0o600 });
+      writeDiagnostic(logPath, error.message);
       throw new Error(`فشل اختبار Migration منفذ 2D-B؛ التشخيص المحمي: ${logPath}`);
     }
     const after = psql(businessStateSql);
@@ -279,6 +293,7 @@ BEGIN;
 ${diagnosticMigration}
 ${lifecycleMigration}
 ${rebuildMigration}
+${systemAccountsMigration}
 ${plannerMigration}
 DO $red$
 BEGIN
@@ -304,4 +319,11 @@ ROLLBACK;`);
   console.log("لم تُنفذ سيناريوهات العقد ولم تتغير L3 أو Staging أو أي قاعدة إنتاجية");
 }
 
-main();
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  try {
+    main();
+  } catch (error) {
+    console.error(error.message);
+    process.exitCode = 1;
+  }
+}

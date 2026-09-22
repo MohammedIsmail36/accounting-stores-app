@@ -38,6 +38,7 @@ DECLARE
   v_allowed_codes text[];
   v_required_codes text[] := ARRAY[]::text[];
   v_missing_codes text[];
+  v_invalid_codes text[];
   v_unexpected_codes text[];
   v_expected_debit numeric := 0;
   v_expected_credit numeric := 0;
@@ -279,6 +280,32 @@ BEGIN
       'source_type', v_source_type,
       'source_id', p_source_id,
       'missing_account_codes', to_jsonb(v_missing_codes)
+    );
+  END IF;
+
+  SELECT array_agg(required.code ORDER BY required.code) INTO v_invalid_codes
+  FROM unnest(v_required_codes) AS required(code)
+  WHERE required.code IN ('4201', '5201')
+    AND NOT EXISTS (
+      SELECT 1
+      FROM public.accounts account
+      JOIN public.accounts parent ON parent.id = account.parent_id
+      WHERE account.code = required.code
+        AND account.is_system IS TRUE
+        AND account.is_active IS TRUE
+        AND account.is_parent IS FALSE
+        AND (
+          (required.code = '4201' AND account.account_type = 'revenue' AND parent.code = '4')
+          OR (required.code = '5201' AND account.account_type = 'expense' AND parent.code = '5')
+        )
+    );
+  IF COALESCE(array_length(v_invalid_codes, 1), 0) > 0 THEN
+    RETURN jsonb_build_object(
+      'eligible', false,
+      'reason_code', 'ACCOUNT_MAPPING_INVALID',
+      'source_type', v_source_type,
+      'source_id', p_source_id,
+      'invalid_account_codes', to_jsonb(v_invalid_codes)
     );
   END IF;
 

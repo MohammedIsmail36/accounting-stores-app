@@ -469,6 +469,38 @@ BEGIN
 END;
 $scenario_16$;
 
+-- Scenario 17: تعطيل حساب خسائر التسوية يوقف خطة العجز بأمان.
+DO $scenario_17$
+DECLARE v_source uuid; v_plan jsonb;
+BEGIN
+  v_source := pg_temp.add_2d_source('adjustment', 'none', -1);
+  UPDATE public.accounts SET is_active = false WHERE code = '5201';
+  v_plan := pg_temp.plan_2d('adjustment', v_source);
+  IF COALESCE((v_plan->>'eligible')::boolean, false)
+     OR v_plan->>'reason_code' <> 'ACCOUNT_MAPPING_INVALID'
+     OR NOT (v_plan->'invalid_account_codes' ? '5201') THEN
+    RAISE EXCEPTION '2D_INACTIVE_LOSS_ACCOUNT_NOT_BLOCKED';
+  END IF;
+  UPDATE public.accounts SET is_active = true WHERE code = '5201';
+END;
+$scenario_17$;
+
+-- Scenario 18: تعطيل حساب أرباح التسوية يوقف خطة الفائض بأمان.
+DO $scenario_18$
+DECLARE v_source uuid; v_plan jsonb;
+BEGIN
+  v_source := pg_temp.add_2d_source('adjustment', 'none', 1);
+  UPDATE public.accounts SET is_active = false WHERE code = '4201';
+  v_plan := pg_temp.plan_2d('adjustment', v_source);
+  IF COALESCE((v_plan->>'eligible')::boolean, false)
+     OR v_plan->>'reason_code' <> 'ACCOUNT_MAPPING_INVALID'
+     OR NOT (v_plan->'invalid_account_codes' ? '4201') THEN
+    RAISE EXCEPTION '2D_INACTIVE_GAIN_ACCOUNT_NOT_BLOCKED';
+  END IF;
+  UPDATE public.accounts SET is_active = true WHERE code = '4201';
+END;
+$scenario_18$;
+
 SELECT 'INVENTORY_RECONCILIATION_MISSING_JOURNAL_PLAN_CONTRACT_OK';
 
 ROLLBACK;
