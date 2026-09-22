@@ -266,9 +266,12 @@ BEGIN
     v_allowed_codes := ARRAY['1104', '4201'];
   END IF;
 
-  SELECT array_agg(code ORDER BY code) INTO v_missing_codes
-  FROM unnest(v_required_codes) code
-  WHERE NOT EXISTS (SELECT 1 FROM public.accounts a WHERE a.code = code);
+  SELECT array_agg(required.code ORDER BY required.code) INTO v_missing_codes
+  FROM unnest(v_required_codes) AS required(code)
+  WHERE NOT EXISTS (
+    SELECT 1 FROM public.accounts account
+    WHERE account.code = required.code
+  );
   IF COALESCE(array_length(v_missing_codes, 1), 0) > 0 THEN
     RETURN jsonb_build_object(
       'eligible', false,

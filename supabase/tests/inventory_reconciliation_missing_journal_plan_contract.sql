@@ -46,6 +46,18 @@ BEGIN
 
   SELECT id INTO STRICT v_sales_tax FROM public.accounts WHERE code = '2102';
   SELECT id INTO STRICT v_purchase_tax FROM public.accounts WHERE code = '1105';
+  INSERT INTO public.accounts(code, name, account_type, parent_id, is_system)
+  SELECT '4201', 'أرباح تسوية المخزون — اختبار 2D', 'revenue',
+    (SELECT id FROM public.accounts WHERE code = '4' ORDER BY id LIMIT 1), true
+  WHERE NOT EXISTS (SELECT 1 FROM public.accounts WHERE code = '4201');
+  INSERT INTO public.accounts(code, name, account_type, parent_id, is_system)
+  SELECT '5108', 'فروق تكلفة المشتريات — اختبار 2D', 'expense',
+    (SELECT id FROM public.accounts WHERE code = '5' ORDER BY id LIMIT 1), true
+  WHERE NOT EXISTS (SELECT 1 FROM public.accounts WHERE code = '5108');
+  INSERT INTO public.accounts(code, name, account_type, parent_id, is_system)
+  SELECT '5201', 'خسائر تسوية المخزون — اختبار 2D', 'expense',
+    (SELECT id FROM public.accounts WHERE code = '5' ORDER BY id LIMIT 1), true
+  WHERE NOT EXISTS (SELECT 1 FROM public.accounts WHERE code = '5201');
   UPDATE public.company_settings
   SET enable_tax = true,
       sales_tax_account_id = v_sales_tax,
