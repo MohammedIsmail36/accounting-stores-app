@@ -139,7 +139,7 @@ SELECT jsonb_build_object(
     'missing_journal_enabled', position('missing_inventory_journal_created' IN pg_get_functiondef(
       '${executorSignature}'::regprocedure)) > 0,
     'rebuild_preserved', position('product_card_rebuilt' IN pg_get_functiondef(
-      '${executorSignature}'::regprocedure)) > 0,
+      '${rebuildSignature}'::regprocedure)) > 0,
     'mapping_validation', position('ACCOUNT_MAPPING_INVALID' IN pg_get_functiondef(
       '${plannerBaseSignature}'::regprocedure)) > 0
   ),
@@ -241,6 +241,11 @@ function main() {
   }
 
   const reportDir = mkdtempSync("/tmp/accounting-staging-inventory-missing-journal-postapply-");
+  const uid = Number(process.env.SUDO_UID);
+  const gid = Number(process.env.SUDO_GID);
+  if (Number.isSafeInteger(uid) && uid >= 0 && Number.isSafeInteger(gid) && gid >= 0) {
+    chownSync(reportDir, uid, gid);
+  }
   const sqlPath = join(reportDir, "post-apply-verification.sql");
   const logPath = join(reportDir, "run.log");
   const reportPath = join(reportDir, "report.json");

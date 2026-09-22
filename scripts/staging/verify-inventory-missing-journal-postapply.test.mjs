@@ -18,6 +18,7 @@ test("فاحص ما بعد تطبيق 2D يحتوي حواجز Staging والق�
   assert.match(sql, /BEGIN TRANSACTION READ ONLY;/);
   assert.match(sql, /ROLLBACK;/);
   assert.doesNotMatch(sql, /\b(?:INSERT|UPDATE|DELETE|COMMIT)\b/i);
+  assert.match(sql, /product_card_rebuilt[\s\S]*execute_inventory_reconciliation_repair_rebuild_2c/);
 });
 
 test("يرفض الفاحص عند اختفاء هوية Staging", () => {
