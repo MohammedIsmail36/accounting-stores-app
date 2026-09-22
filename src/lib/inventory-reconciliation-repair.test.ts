@@ -262,6 +262,23 @@ describe("inventory reconciliation repair presentation", () => {
     })).toBe(false);
   });
 
+  it("تعرض مسار 2D لحركة بلا قيد وتترك قرار الأهلية للخطة الخادمية", () => {
+    const row = {
+      kind: "source" as const,
+      classification: "movement_without_journal",
+      canPrepareRepair: false,
+      sourceKey: `purchase_invoice:${validRow.id}`,
+      sourceType: "purchase_invoice",
+      sourceId: validRow.id,
+    };
+    expect(canPrepareInventoryRepairDraft(row)).toBe(true);
+    expect(buildInventoryRepairDraftItem(row)).toMatchObject({
+      repair_type: "create_missing_inventory_journal",
+      source_type: "purchase_invoice",
+      source_id: validRow.id,
+    });
+  });
+
   it("تتحقق من نتيجة أمر إنشاء المسودة", () => {
     expect(parseInventoryRepairCommandResult({
       id: validRow.id,

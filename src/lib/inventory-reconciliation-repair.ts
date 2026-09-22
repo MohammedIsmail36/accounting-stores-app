@@ -575,7 +575,9 @@ const repairTypeByClassification: Record<string, string> = {
 };
 
 export function canPrepareInventoryRepairDraft(row: InventoryRepairDraftDiagnosticRow) {
-  if (!row.canPrepareRepair || row.classification === "matched") return false;
+  const missingJournalCandidate = row.kind === "source"
+    && row.classification === "movement_without_journal";
+  if ((!row.canPrepareRepair && !missingJournalCandidate) || row.classification === "matched") return false;
   if (!repairTypeByClassification[row.classification]) return false;
   return row.kind === "product"
     ? row.classification === "product_balance" && Boolean(row.productId)
