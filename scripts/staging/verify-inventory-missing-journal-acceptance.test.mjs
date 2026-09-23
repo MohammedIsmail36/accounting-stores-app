@@ -8,7 +8,7 @@ const source = readFileSync(
   "utf8",
 );
 
-test("فاحص قبول 2D للقراءة فقط ومقيد بـStaging", () => {
+test("فاحص قبول 2D مشترك للشراء والبيع، للقراءة فقط ومقيد بـStaging", () => {
   for (const required of [
     "dunzfxurefzlaamgghys",
     "BEGIN TRANSACTION READ ONLY",
@@ -17,9 +17,19 @@ test("فاحص قبول 2D للقراءة فقط ومقيد بـStaging", () => 
     "--submitted",
     "--approved",
     "--executed",
+    "--purchase",
+    "--sales",
     "STAGING_2D_PURCHASE_ACCEPTANCE_VERIFIED",
+    "STAGING_2D_SALES_ACCEPTANCE_VERIFIED",
+    "opening_balance",
+    "staging_seed",
     "NO_CORRECTION_REQUIRED",
     "missing_inventory_journal_created",
+    "journalPostedNumber: 312",
+    "journalPostedNumber: 314",
+    "openingPostedNumber: 313",
+    "journal_entry_prefix",
+    "officialJournalNumber",
     "productionModified: false",
   ]) assert.ok(source.includes(required), `حارس مفقود: ${required}`);
 
