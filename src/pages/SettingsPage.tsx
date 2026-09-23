@@ -17,8 +17,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { AccountCombobox } from "@/components/AccountCombobox";
 import { notify } from "@/lib/notify";
+import {
+  buildCompanySettingsUpdatePayload,
+  SYSTEM_TAX_ACCOUNT_CODES,
+} from "@/lib/tax-settings";
 import { useUserRole } from "@/hooks/use-user-role";
 import { TelegramSettingsTab } from "@/components/settings/TelegramSettingsTab";
 import { z } from "zod";
@@ -115,6 +118,43 @@ interface AccountOption {
   code: string;
   name: string;
   account_type: string;
+  is_system: boolean;
+}
+
+function SystemTaxAccountCard({
+  label,
+  expectedCode,
+  account,
+  linked,
+}: {
+  label: string;
+  expectedCode: string;
+  account?: AccountOption;
+  linked: boolean;
+}) {
+  const ready = Boolean(account?.is_system && linked);
+  return (
+    <div className="rounded-xl border border-border bg-muted/30 p-4 space-y-2">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <Label className="text-sm font-bold">{label}</Label>
+          <p className="mt-1 flex flex-wrap items-center gap-1.5 text-sm">
+            <span className="font-mono tabular-nums" dir="ltr">
+              {account?.code ?? expectedCode}
+            </span>
+            <span aria-hidden="true">—</span>
+            <span>{account?.name ?? "غير متاح"}</span>
+          </p>
+        </div>
+        <ShieldCheck className={`h-5 w-5 shrink-0 ${ready ? "text-emerald-600" : "text-destructive"}`} />
+      </div>
+      <p className={`text-xs ${ready ? "text-muted-foreground" : "text-destructive"}`}>
+        {ready
+          ? "حساب نظام محمي — للقراءة فقط"
+          : "الربط الداخلي غير مطابق؛ لا تفعّل الضريبة قبل مراجعة المسؤول"}
+      </p>
+    </div>
+  );
 }
 
 export default function SettingsPage() {
@@ -135,19 +175,29 @@ export default function SettingsPage() {
   const fetchAccounts = async () => {
     const { data } = await supabase
       .from("accounts")
-      .select("id, code, name, account_type")
+      .select("id, code, name, account_type, is_system")
       .eq("is_active", true)
       .eq("is_parent", false)
+      .in("code", Object.values(SYSTEM_TAX_ACCOUNT_CODES))
       .order("code");
     setAccounts((data as AccountOption[]) || []);
   };
 
-  // حسابات الضريبة المرشحة (الأصول للمشتريات والخصوم للمبيعات)
-  const purchaseTaxAccounts = accounts.filter(
-    (a) => a.account_type === "asset",
+  const purchaseTaxAccount = accounts.find(
+    (account) => account.code === SYSTEM_TAX_ACCOUNT_CODES.purchase,
   );
-  const salesTaxAccounts = accounts.filter(
-    (a) => a.account_type === "liability",
+  const salesTaxAccount = accounts.find(
+    (account) => account.code === SYSTEM_TAX_ACCOUNT_CODES.sales,
+  );
+  const purchaseTaxAccountReady = Boolean(
+    purchaseTaxAccount?.is_system
+      && purchaseTaxAccount.account_type === "asset"
+      && settings?.purchase_tax_account_id === purchaseTaxAccount.id,
+  );
+  const salesTaxAccountReady = Boolean(
+    salesTaxAccount?.is_system
+      && salesTaxAccount.account_type === "liability"
+      && settings?.sales_tax_account_id === salesTaxAccount.id,
   );
 
   const fetchSettings = async () => {
@@ -202,21 +252,15 @@ export default function SettingsPage() {
         notify.error("نسبة الضريبة يجب أن تكون أكبر من صفر عند تفعيل الضريبة");
         return;
       }
-      if (!settings.sales_tax_account_id) {
-        notify.error("يجب اختيار حساب ضريبة المبيعات");
-        return;
-      }
-      if (!settings.purchase_tax_account_id) {
-        notify.error("يجب اختيار حساب ضريبة المشتريات");
+      if (!salesTaxAccountReady || !purchaseTaxAccountReady) {
+        notify.error("ربط حسابي الضريبة النظاميين 1105/2104 غير صحيح — تواصل مع المسؤول");
         return;
       }
     }
     setSaving(true);
     // استبعاد الحقول المُدارة من قِبل قاعدة البيانات لتجنّب إرباك التريجرز
-    const { id, ...rest } = settings as any;
-    delete rest.created_at;
-    delete rest.updated_at;
-    delete rest.singleton;
+    const { id } = settings;
+    const rest = buildCompanySettingsUpdatePayload(settings);
 
     const { data, error } = await supabase
       .from("company_settings")
@@ -790,57 +834,19 @@ export default function SettingsPage() {
 
                 <div /> {/* spacer */}
 
-                {/* حساب ضريبة المبيعات */}
-                <div className="space-y-2">
-                  <Label className="text-sm font-bold">
-                    حساب ضريبة المبيعات (مخرجات){" "}
-                    {settings.enable_tax && (
-                      <span className="text-destructive">*</span>
-                    )}
-                  </Label>
-                  <AccountCombobox
-                    accounts={salesTaxAccounts}
-                    value={settings.sales_tax_account_id || ""}
-                    onValueChange={(v) =>
-                      updateField("sales_tax_account_id", v || null)
-                    }
-                    placeholder="اختر حساب ضريبة المبيعات (خصوم)"
-                    disabled={!settings.enable_tax}
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    حساب من نوع <strong>خصوم</strong> يُستخدم لتسجيل ضريبة
-                    المبيعات المستحقة (مثال: 2102)
-                  </p>
-                  {settings.enable_tax && !settings.sales_tax_account_id && (
-                    <p className="text-xs text-destructive">حقل إلزامي</p>
-                  )}
-                </div>
+                <SystemTaxAccountCard
+                  label="حساب ضريبة المخرجات (2104)"
+                  expectedCode={SYSTEM_TAX_ACCOUNT_CODES.sales}
+                  account={salesTaxAccount}
+                  linked={salesTaxAccountReady}
+                />
 
-                {/* حساب ضريبة المشتريات */}
-                <div className="space-y-2">
-                  <Label className="text-sm font-bold">
-                    حساب ضريبة المشتريات (مدخلات){" "}
-                    {settings.enable_tax && (
-                      <span className="text-destructive">*</span>
-                    )}
-                  </Label>
-                  <AccountCombobox
-                    accounts={purchaseTaxAccounts}
-                    value={settings.purchase_tax_account_id || ""}
-                    onValueChange={(v) =>
-                      updateField("purchase_tax_account_id", v || null)
-                    }
-                    placeholder="اختر حساب ضريبة المشتريات (أصول)"
-                    disabled={!settings.enable_tax}
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    حساب من نوع <strong>أصول</strong> يُستخدم لتسجيل ضريبة
-                    المدخلات القابلة للاسترداد (مثال: 1105)
-                  </p>
-                  {settings.enable_tax && !settings.purchase_tax_account_id && (
-                    <p className="text-xs text-destructive">حقل إلزامي</p>
-                  )}
-                </div>
+                <SystemTaxAccountCard
+                  label="حساب ضريبة المدخلات (1105)"
+                  expectedCode={SYSTEM_TAX_ACCOUNT_CODES.purchase}
+                  account={purchaseTaxAccount}
+                  linked={purchaseTaxAccountReady}
+                />
               </div>
 
               <hr className="border-border" />
