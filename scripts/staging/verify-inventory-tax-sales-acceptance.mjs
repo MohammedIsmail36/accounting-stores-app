@@ -179,7 +179,9 @@ export function validateVerification(value, phase, baseline) {
         || !Number.isInteger(journal?.posted_number) || Number(journal?.total_debit) !== 194
         || Number(journal?.total_credit) !== 194
         || JSON.stringify(comparableLines(journal?.lines)) !== JSON.stringify(comparableLines(expectedLines))
-        || value?.live_plan?.eligible !== false || value?.live_plan?.reason_code !== "NO_CORRECTION_REQUIRED") failures.push("execution_state");
+        || value?.live_plan?.eligible !== false || value?.live_plan?.reason_code !== "NO_CORRECTION_REQUIRED"
+        || (value?.diagnostic_row !== null && (value?.diagnostic_row?.classification !== "matched"
+          || Number(value?.diagnostic_row?.source_difference) !== 0))) failures.push("execution_state");
   }
   if (failures.length) throw new Error(`فشل تحقق قبول البيع الضريبي: ${failures.join(",")}`);
   return value;
