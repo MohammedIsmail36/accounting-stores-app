@@ -145,13 +145,31 @@ Deno.serve(async (req) => {
     }
 
     // ── 3. إعدادات الشركة (تخطي إذا موجودة) ──
-    const { data: existingSettings } = await supabase.from("company_settings").select("id").limit(1);
+    const { data: existingSettings } = await supabase
+      .from("company_settings")
+      .select("id, purchase_tax_account_id, sales_tax_account_id")
+      .limit(1);
     if (existingSettings && existingSettings.length > 0) {
-      results.push("ℹ️ إعدادات الشركة موجودة مسبقاً");
+      const current = existingSettings[0];
+      const defaults = {
+        purchase_tax_account_id: current.purchase_tax_account_id ?? codeToId["1105"] ?? null,
+        sales_tax_account_id: current.sales_tax_account_id ?? codeToId["2104"] ?? null,
+      };
+      const { error: defaultsErr } = await supabase
+        .from("company_settings")
+        .update(defaults)
+        .eq("id", current.id);
+      results.push(defaultsErr
+        ? `❌ خطأ في ربط حسابات الضريبة الافتراضية: ${defaultsErr.message}`
+        : "ℹ️ إعدادات الشركة موجودة وحسابات الضريبة الافتراضية مرتبطة");
     } else {
       const { error: settingsErr } = await supabase
         .from("company_settings")
-        .insert({ company_name: DEFAULT_COMPANY_NAME });
+        .insert({
+          company_name: DEFAULT_COMPANY_NAME,
+          purchase_tax_account_id: codeToId["1105"] ?? null,
+          sales_tax_account_id: codeToId["2104"] ?? null,
+        });
       results.push(settingsErr ? `❌ خطأ في إنشاء الإعدادات: ${settingsErr.message}` : "✅ تم إنشاء إعدادات الشركة");
     }
 

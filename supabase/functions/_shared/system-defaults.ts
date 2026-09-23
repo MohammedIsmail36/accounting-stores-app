@@ -18,7 +18,9 @@ export const SYSTEM_CODES = [
   "1102",
   "1103",
   "1104",
+  "1105",
   "2101",
+  "2104",
   "3101",
   "3102",
   "4101",
@@ -129,6 +131,13 @@ export const DEFAULT_ACCOUNTS: DefaultAccount[] = [
   {
     code: "2103",
     name: "قروض طويلة الأجل",
+    account_type: "liability",
+    is_parent: false,
+    parent_code: "2",
+  },
+  {
+    code: "2104",
+    name: "ضريبة القيمة المضافة للمخرجات",
     account_type: "liability",
     is_parent: false,
     parent_code: "2",

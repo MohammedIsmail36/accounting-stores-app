@@ -233,7 +233,11 @@ Deno.serve(async (req) => {
     // ── Step 7: إعادة إنشاء إعدادات الشركة ──
     const { error: settingsErr } = await supabase
       .from("company_settings")
-      .insert({ company_name: DEFAULT_COMPANY_NAME });
+      .insert({
+        company_name: DEFAULT_COMPANY_NAME,
+        purchase_tax_account_id: codeToId["1105"] ?? null,
+        sales_tax_account_id: codeToId["2104"] ?? null,
+      });
     results.push(settingsErr ? `❌ خطأ في إنشاء الإعدادات: ${settingsErr.message}` : "✅ تم إنشاء إعدادات الشركة");
 
     results.push("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
