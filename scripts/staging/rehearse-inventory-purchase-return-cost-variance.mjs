@@ -1,0 +1,191 @@
+// Transactional Staging-only rehearsal for the purchase-return cost variance on account 5108.
+import { isDeepStrictEqual } from "node:util";
+import { chmodSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import { baselineSql, extract, fixture, validateBaseline } from "./backup-inventory-purchase-return-cost-variance-baseline.mjs";
+
+const root = fileURLToPath(new URL("../../", import.meta.url));
+const projectRef = "dunzfxurefzlaamgghys";
+const archive = "/backups/staging/inventory-purchase-return-variance-before-20260924-040046";
+const cli = "supabase@2.116.0";
+
+function assertStaging() {
+  if (readFileSync(join(root, "supabase/.temp/project-ref"), "utf8").trim() !== projectRef) {
+    throw new Error("المشروع المرتبط ليس Staging المعتمد");
+  }
+}
+
+function cliEnvironment() {
+  if (process.getuid?.() === 0 && process.env.SUDO_USER !== "deploy") throw new Error("استخدم sudo من حساب deploy فقط");
+  const token = readFileSync("/home/deploy/.supabase/access-token", "utf8").trim();
+  if (!token) throw new Error("جلسة Supabase غير موجودة");
+  return { ...process.env, ...(process.getuid?.() === 0 ? { HOME: "/home/deploy" } : {}), SUPABASE_ACCESS_TOKEN: token };
+}
+
+function runCli(sql, label, dir) {
+  assertStaging();
+  const sqlPath = join(dir, `${label}.sql`);
+  const logPath = join(dir, `${label}.log`);
+  writeFileSync(sqlPath, sql, { mode: 0o600 });
+  const result = spawnSync("npx", ["-y", cli, "db", "query", "--linked", "--output-format", "json", "--file", sqlPath], {
+    cwd: root, env: cliEnvironment(), encoding: "utf8", timeout: 300000, maxBuffer: 64 * 1024 * 1024,
+  });
+  writeFileSync(logPath, `${result.stdout ?? ""}\n${result.stderr ?? ""}\n`, { mode: 0o600 });
+  if (result.status !== 0 || result.error || /"error"\s*:/.test(result.stdout ?? "")) {
+    throw new Error(`فشلت تجربة فرق تكلفة مرتجع الشراء (${label})؛ التشخيص: ${logPath}`);
+  }
+  return JSON.parse(result.stdout);
+}
+
+function normalize(value) {
+  const copy = structuredClone(value);
+  if (copy?.diagnostic) delete copy.diagnostic.snapshot_at;
+  return copy;
+}
+
+function assertSame(actual, expected, label, dir) {
+  if (!isDeepStrictEqual(normalize(actual), normalize(expected))) {
+    writeFileSync(join(dir, `${label}-mismatch.json`), `${JSON.stringify({ expected, actual }, null, 2)}\n`, { mode: 0o600 });
+    throw new Error(`تغير خط أساس Staging ${label}؛ أُلغيت التجربة`);
+  }
+}
+
+export const rehearsalSql = `BEGIN;
+SELECT set_config('request.jwt.claim.role', 'service_role', true);
+
+DO $guard$
+BEGIN
+  IF current_database() <> 'postgres' OR current_setting('server_version') NOT LIKE '17.%'
+     OR NOT EXISTS (SELECT 1 FROM supabase_migrations.schema_migrations WHERE version = '20260923100000')
+     OR NOT EXISTS (SELECT 1 FROM supabase_migrations.schema_migrations WHERE version = '20260923130000')
+     OR to_regprocedure('public.get_inventory_reconciliation_journal_plan(text,uuid,date)') IS NULL
+     OR to_regprocedure('public.execute_inventory_reconciliation_repair(uuid,integer,uuid)') IS NULL
+     OR NOT EXISTS (SELECT 1 FROM public.company_settings s JOIN public.accounts a ON a.id = s.purchase_tax_account_id
+       WHERE s.enable_tax IS TRUE AND s.tax_rate = 14 AND a.code = '1105' AND a.is_system IS TRUE)
+     OR NOT EXISTS (SELECT 1 FROM public.purchase_invoices i JOIN public.journal_entries j ON j.id = i.journal_entry_id
+       WHERE i.id = '${fixture.sourceInvoiceId}'::uuid AND i.status = 'posted' AND j.status = 'posted'
+         AND i.tax = 14 AND i.total = 114)
+     OR NOT EXISTS (SELECT 1 FROM public.purchase_returns r JOIN public.journal_entries j ON j.id = r.journal_entry_id
+       WHERE r.id = '${fixture.priorReturnId}'::uuid AND r.status = 'posted' AND j.status = 'posted'
+         AND r.purchase_invoice_id = '${fixture.sourceInvoiceId}'::uuid AND r.total = 57)
+     OR (SELECT count(*) FROM public.purchase_returns WHERE purchase_invoice_id = '${fixture.sourceInvoiceId}'::uuid) <> 1
+     OR NOT EXISTS (SELECT 1 FROM public.products WHERE id = '${fixture.productId}'::uuid
+       AND code = 'TST-TAX-PI-001' AND quantity_on_hand = 1 AND purchase_price = 50)
+     OR EXISTS (SELECT 1 FROM public.purchase_returns WHERE id = '${fixture.returnId}'::uuid OR return_number = ${fixture.returnNumber})
+     OR EXISTS (SELECT 1 FROM public.purchase_return_items WHERE id = '${fixture.itemId}'::uuid)
+     OR EXISTS (SELECT 1 FROM public.inventory_movements WHERE id = '${fixture.movementId}'::uuid)
+     OR EXISTS (SELECT 1 FROM public.inventory_reconciliation_repair_items
+       WHERE source_type = 'purchase_return' AND source_id = '${fixture.returnId}'::uuid) THEN
+    RAISE EXCEPTION 'STAGING_PURCHASE_RETURN_VARIANCE_GUARD_FAILED';
+  END IF;
+END;
+$guard$;
+
+UPDATE public.products SET quantity_on_hand = 0 WHERE id = '${fixture.productId}'::uuid AND quantity_on_hand = 1;
+
+INSERT INTO public.purchase_returns(id, return_number, purchase_invoice_id, return_date, subtotal, discount, tax, total,
+  status, journal_entry_id, notes)
+VALUES ('${fixture.returnId}'::uuid, ${fixture.returnNumber}, '${fixture.sourceInvoiceId}'::uuid,
+  current_date, 45, 0, 6.30, 51.30, 'posted', NULL, '__PURCHASE_RETURN_COST_VARIANCE_WITHOUT_JOURNAL__');
+
+INSERT INTO public.purchase_return_items(id, return_id, product_id, description, quantity, unit_price, discount, total)
+VALUES ('${fixture.itemId}'::uuid, '${fixture.returnId}'::uuid, '${fixture.productId}'::uuid,
+  'بند اختبار مرتجع شراء بتعويض أقل من تكلفة المخزون', 1, 45, 0, 45);
+
+INSERT INTO public.inventory_movements(id, product_id, movement_type, quantity, unit_cost, total_cost,
+  reference_id, reference_type, notes, movement_date)
+VALUES ('${fixture.movementId}'::uuid, '${fixture.productId}'::uuid, 'purchase_return', 1, 50, 50,
+  '${fixture.returnId}'::uuid, 'purchase_return', '__PURCHASE_RETURN_COST_VARIANCE__', current_date);
+
+DO $verify$
+DECLARE
+  v_source jsonb;
+  v_plan jsonb;
+  v_debit numeric;
+  v_credit numeric;
+BEGIN
+  SELECT value INTO v_source FROM jsonb_array_elements(public.get_inventory_reconciliation_diagnostic(
+    'sources', true, '${fixture.returnId}', 500, 0, NULL
+  )->'rows') WHERE value->>'source_type' = 'purchase_return' AND value->>'source_id' = '${fixture.returnId}' LIMIT 1;
+  v_plan := public.get_inventory_reconciliation_journal_plan('purchase_return', '${fixture.returnId}'::uuid, NULL);
+  SELECT round(COALESCE(sum((line->>'debit')::numeric), 0), 2), round(COALESCE(sum((line->>'credit')::numeric), 0), 2)
+  INTO v_debit, v_credit FROM jsonb_array_elements(v_plan->'correction_lines') line;
+  IF v_source IS NULL OR v_source->>'classification' <> 'movement_without_journal'
+     OR (v_source->>'movement_count')::integer <> 1
+     OR round((v_source->>'movement_book_value')::numeric, 2) <> -50
+     OR (SELECT quantity_on_hand FROM public.products WHERE id = '${fixture.productId}'::uuid) <> 0
+     OR (SELECT sum(public.inventory_signed_quantity(movement_type::text, quantity))
+         FROM public.inventory_movements WHERE product_id = '${fixture.productId}'::uuid) <> 0
+     OR COALESCE((v_plan->>'eligible')::boolean, false) IS NOT TRUE
+     OR v_plan->>'reason_code' <> 'READY' OR v_plan->>'mode' <> 'create_full_journal'
+     OR v_plan->>'source_number' <> '${fixture.returnNumber}'
+     OR round((v_plan->>'movement_book_value')::numeric, 2) <> -50
+     OR v_debit <> 56.30 OR v_credit <> 56.30 OR jsonb_array_length(v_plan->'correction_lines') <> 4
+     OR NOT EXISTS (SELECT 1 FROM jsonb_array_elements(v_plan->'correction_lines') l
+       WHERE l->>'account_code' = '2101' AND (l->>'debit')::numeric = 51.30 AND (l->>'credit')::numeric = 0)
+     OR NOT EXISTS (SELECT 1 FROM jsonb_array_elements(v_plan->'correction_lines') l
+       WHERE l->>'account_code' = '1104' AND (l->>'debit')::numeric = 0 AND (l->>'credit')::numeric = 50)
+     OR NOT EXISTS (SELECT 1 FROM jsonb_array_elements(v_plan->'correction_lines') l
+       WHERE l->>'account_code' = '1105' AND (l->>'debit')::numeric = 0 AND (l->>'credit')::numeric = 6.30)
+     OR NOT EXISTS (SELECT 1 FROM jsonb_array_elements(v_plan->'correction_lines') l
+       WHERE l->>'account_code' = '5108' AND (l->>'debit')::numeric = 5 AND (l->>'credit')::numeric = 0) THEN
+    RAISE EXCEPTION 'STAGING_PURCHASE_RETURN_VARIANCE_PLAN_INVALID: source=%, plan=%', v_source, v_plan;
+  END IF;
+END;
+$verify$;
+
+DO $explicit_rollback$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM public.purchase_returns WHERE id = '${fixture.returnId}'::uuid
+      AND return_number = ${fixture.returnNumber} AND purchase_invoice_id = '${fixture.sourceInvoiceId}'::uuid
+      AND notes = '__PURCHASE_RETURN_COST_VARIANCE_WITHOUT_JOURNAL__' AND journal_entry_id IS NULL)
+     OR NOT EXISTS (SELECT 1 FROM public.products WHERE id = '${fixture.productId}'::uuid AND quantity_on_hand = 0)
+     OR EXISTS (SELECT 1 FROM public.inventory_reconciliation_repair_items WHERE source_type = 'purchase_return'
+       AND source_id = '${fixture.returnId}'::uuid) THEN
+    RAISE EXCEPTION 'STAGING_PURCHASE_RETURN_VARIANCE_ROLLBACK_REFUSED';
+  END IF;
+  DELETE FROM public.inventory_movements WHERE id = '${fixture.movementId}'::uuid;
+  DELETE FROM public.purchase_return_items WHERE id = '${fixture.itemId}'::uuid;
+  DELETE FROM public.purchase_returns WHERE id = '${fixture.returnId}'::uuid;
+  UPDATE public.products SET quantity_on_hand = 1 WHERE id = '${fixture.productId}'::uuid AND quantity_on_hand = 0;
+  IF EXISTS (SELECT 1 FROM public.purchase_returns WHERE id = '${fixture.returnId}'::uuid)
+     OR EXISTS (SELECT 1 FROM public.inventory_movements WHERE id = '${fixture.movementId}'::uuid)
+     OR NOT EXISTS (SELECT 1 FROM public.products WHERE id = '${fixture.productId}'::uuid AND quantity_on_hand = 1) THEN
+    RAISE EXCEPTION 'STAGING_PURCHASE_RETURN_VARIANCE_ROLLBACK_POSTCHECK_FAILED';
+  END IF;
+END;
+$explicit_rollback$;
+
+SELECT jsonb_build_object('result', 'STAGING_PURCHASE_RETURN_VARIANCE_REHEARSAL_OK', 'return_number', ${fixture.returnNumber},
+  'tax_rate', 14, 'debit', 56.30, 'credit', 56.30, 'source_type', 'purchase_return', 'variance_account', '5108',
+  'rolled_back', true) AS purchase_return_variance_rehearsal;
+ROLLBACK;
+`;
+
+function main() {
+  if (process.argv.length !== 2) throw new Error("هذا المشغل لا يقبل معاملات");
+  assertStaging();
+  process.umask(0o077);
+  const expected = validateBaseline(JSON.parse(readFileSync(join(archive, "baseline.json"), "utf8")));
+  const dir = mkdtempSync("/tmp/accounting-staging-purchase-return-variance-rehearsal-");
+  chmodSync(dir, 0o700);
+  const before = validateBaseline(extract(runCli(baselineSql, "baseline-before", dir), "purchase_return_acceptance_baseline"));
+  assertSame(before, expected, "قبل التجربة", dir);
+  const result = extract(runCli(rehearsalSql, "rehearsal", dir), "purchase_return_variance_rehearsal");
+  if (result?.result !== "STAGING_PURCHASE_RETURN_VARIANCE_REHEARSAL_OK" || result.rolled_back !== true
+      || Number(result.debit) !== 56.30 || Number(result.credit) !== 56.30) throw new Error(`نتيجة التجربة غير سليمة: ${dir}`);
+  const after = validateBaseline(extract(runCli(baselineSql, "baseline-after", dir), "purchase_return_acceptance_baseline"));
+  assertSame(after, expected, "بعد الرجوع", dir);
+  writeFileSync(join(dir, "report.json"), `${JSON.stringify({ ...result, projectRef, baselineRestored: true,
+    productionModified: false, createdAt: new Date().toISOString() }, null, 2)}\n`, { mode: 0o600 });
+  console.log("نجحت تجربة فرق تكلفة مرتجع الشراء على Staging داخل معاملة انتهت بـ ROLLBACK كامل");
+  console.log("الخطة متوازنة: 2101 مدين 51.30، 5108 مدين 5، 1104 دائن 50، 1105 دائن 6.30");
+  console.log("عادت بطاقة المنتج وبيانات الأعمال والتشخيص إلى خط الأساس؛ لم تُنشأ حالة دائمة");
+  console.log(`REPORT_DIR=${dir}`);
+}
+
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  try { main(); } catch (error) { console.error(error.message); process.exitCode = 1; }
+}
