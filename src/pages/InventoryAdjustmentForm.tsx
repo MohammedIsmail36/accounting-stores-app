@@ -1,9 +1,8 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { PageHeader } from "@/components/PageHeader";
 import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
-import { createJournalEntry, createReverseJournalEntry } from "@/lib/journal-writer";
-import { getNextPostedNumber } from "@/lib/posted-number-utils";
+import { postInventoryAdjustmentAtomic, reverseInventoryAdjustmentAtomic } from "@/lib/inventory-adjustment-atomic";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSettings } from "@/contexts/SettingsContext";
 import { useNavigationGuard } from "@/hooks/use-navigation-guard";
@@ -27,7 +26,6 @@ import {
   formatProductDisplay,
   PRODUCT_SELECT_FIELDS,
 } from "@/lib/product-utils";
-import { ACCOUNT_CODES } from "@/lib/constants";
 import {
   calculateLegacyAdjustmentLine,
   summarizeLegacyAdjustment,
@@ -86,6 +84,11 @@ export default function InventoryAdjustmentForm() {
   const [items, setItems] = useState<AdjustmentItem[]>([]);
   const [editMode, setEditMode] = useState(true);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [approveOpen, setApproveOpen] = useState(false);
+  const [reverseOpen, setReverseOpen] = useState(false);
+  const [reverseReason, setReverseReason] = useState("");
+  const postRequestId = useRef<string | null>(null);
+  const reverseRequestId = useRef<string | null>(null);
 
   const navGuard = useNavigationGuard(isDirty);
 
@@ -323,321 +326,65 @@ export default function InventoryAdjustmentForm() {
 
   async function handleApprove() {
     if (!id || saving) return;
-    const zeroDiffCount = items.filter(
-      (i) => i.product_id && i.difference === 0,
-    ).length;
-    if (zeroDiffCount > 0) {
-      notify.error("لا يمكن اعتماد التسوية", `يوجد ${zeroDiffCount} بند بفرق صفر. احذفها أو عدّل الكميات الفعلية قبل الاعتماد.`);
+    if (isDirty) {
+      notify.error("احفظ المسودة أولًا", "احفظ تغييرات البنود قبل ترحيل التسوية");
       return;
     }
-    if (
-      settings?.locked_until_date &&
-      adjustmentDate <= settings.locked_until_date
-    ) {
-      notify.error("الفترة مقفلة", `لا يمكن اعتماد تسوية بتاريخ ${adjustmentDate} — الفترة مقفلة حتى ${settings.locked_until_date}`);
+    if (items.length === 0 || items.some((item) => !item.product_id)) {
+      notify.error("بنود غير مكتملة", "أضف منتجًا واحدًا على الأقل لكل بند");
       return;
     }
+    if (items.some((item) => item.difference !== 0 && !item.notes.trim())) {
+      notify.error("سبب الفرق مطلوب", "اكتب سبب الفرق في ملاحظات كل بند ذي فرق");
+      return;
+    }
+    if (settings?.locked_until_date && adjustmentDate <= settings.locked_until_date) {
+      notify.error("الفترة مقفلة", "لا يمكن ترحيل تسوية بتاريخ ضمن فترة مقفلة");
+      return;
+    }
+
     setSaving(true);
     try {
-      // 1. Fetch accounts
-      const { data: invAccount } = await supabase
-        .from("accounts")
-        .select("id")
-        .eq("code", ACCOUNT_CODES.INVENTORY)
-        .single();
-      if (!invAccount)
-        throw new Error(
-          "حساب المخزون غير موجود - تأكد من وجود حساب بكود " +
-            ACCOUNT_CODES.INVENTORY,
-        );
-
-      // Post NET only: single-sided JV based on net difference (surplus or shortage).
-      // Inventory movements below remain per-product for detailed audit.
-      const netAbs = Math.abs(netDifference);
-      const lines: {
-        account_id: string;
-        debit: number;
-        credit: number;
-        description: string;
-      }[] = [];
-
-      if (netDifference < 0) {
-        // Net shortage → 5201 Dr / 1104 Cr
-        let lossAccount: { id: string } | null = null;
-        const { data } = await supabase
-          .from("accounts")
-          .select("id")
-          .eq("code", ACCOUNT_CODES.INVENTORY_ADJUSTMENT_LOSS)
-          .single();
-        lossAccount = data;
-        if (!lossAccount) {
-          const { data: created } = await supabase
-            .from("accounts")
-            .insert({
-              code: ACCOUNT_CODES.INVENTORY_ADJUSTMENT_LOSS,
-              name: "عجز المخزون",
-              account_type: "expense",
-              description: "خسائر ناتجة عن عجز الجرد",
-            })
-            .select()
-            .single();
-          lossAccount = created;
-        }
-        if (!lossAccount) throw new Error("تعذر إنشاء حساب عجز المخزون");
-        lines.push({
-          account_id: lossAccount.id,
-          debit: netAbs,
-          credit: 0,
-          description: `تسوية مخزون ADJ-${adjustmentNumber} — صافي عجز`,
-        });
-        lines.push({
-          account_id: invAccount.id,
-          debit: 0,
-          credit: netAbs,
-          description: `تسوية مخزون ADJ-${adjustmentNumber} — تخفيض مخزون (صافي عجز)`,
-        });
-      } else if (netDifference > 0) {
-        // Net surplus → 1104 Dr / 4201 Cr
-        let gainAccount: { id: string } | null = null;
-        const { data } = await supabase
-          .from("accounts")
-          .select("id")
-          .eq("code", ACCOUNT_CODES.INVENTORY_ADJUSTMENT_GAIN)
-          .single();
-        gainAccount = data;
-        if (!gainAccount) {
-          const { data: created } = await supabase
-            .from("accounts")
-            .insert({
-              code: ACCOUNT_CODES.INVENTORY_ADJUSTMENT_GAIN,
-              name: "فائض المخزون",
-              account_type: "revenue",
-              description: "أرباح ناتجة عن فائض الجرد",
-            })
-            .select()
-            .single();
-          gainAccount = created;
-        }
-        if (!gainAccount) throw new Error("تعذر إنشاء حساب فائض المخزون");
-        lines.push({
-          account_id: invAccount.id,
-          debit: netAbs,
-          credit: 0,
-          description: `تسوية مخزون ADJ-${adjustmentNumber} — زيادة مخزون (صافي فائض)`,
-        });
-        lines.push({
-          account_id: gainAccount.id,
-          debit: 0,
-          credit: netAbs,
-          description: `تسوية مخزون ADJ-${adjustmentNumber} — صافي فائض`,
-        });
-      }
-      // netDifference === 0 → no JV lines; inventory movements still recorded per product.
-
-      // 3. Create journal entry through the single journal gateway
-      let journalEntryId: string | null = null;
-      if (lines.length > 0) {
-        journalEntryId = await createJournalEntry({
-          entryDate: adjustmentDate,
-          description: `تسوية مخزون - جرد رقم ADJ-${adjustmentNumber}`,
-          status: "posted",
-          lines,
-        });
-      }
-
-      // 4. Create inventory movements and update product quantities (atomic)
-      // Pre-validate: ensure no product goes negative
-      for (const item of items) {
-        if (item.difference === 0) continue;
-        if (item.difference < 0) {
-          const { data: freshProd } = await supabase
-            .from("products")
-            .select("quantity_on_hand")
-            .eq("id", item.product_id)
-            .single();
-          if (
-            freshProd &&
-            Number(freshProd.quantity_on_hand) + item.difference < 0
-          ) {
-            throw new Error(
-              `الكمية بعد التسوية ستكون سالبة للمنتج: ${item.product_name}`,
-            );
-          }
-        }
-      }
-
-      const adjustedProducts: { product_id: string; delta: number }[] = [];
-      try {
-        for (const item of items) {
-          if (item.difference === 0) continue;
-
-          // Atomic quantity update via RPC (prevents race conditions)
-          const { error: qtyErr } = await (supabase.rpc as any)(
-            "adjust_product_quantity",
-            {
-              p_product_id: item.product_id,
-              p_delta: item.difference,
-            },
-          );
-          if (qtyErr) throw qtyErr;
-          adjustedProducts.push({
-            product_id: item.product_id,
-            delta: item.difference,
-          });
-
-          const { error: movErr } = await (
-            supabase.from("inventory_movements") as any
-          ).insert({
-            product_id: item.product_id,
-            movement_type: "adjustment",
-            quantity: item.difference,
-            unit_cost: item.unit_cost,
-            total_cost: item.total_cost,
-            movement_date: adjustmentDate,
-            reference_id: id,
-            reference_type: "adjustment",
-            notes: `تسوية جرد ADJ-${adjustmentNumber} - ${item.difference > 0 ? "فائض" : "عجز"}: ${Math.abs(item.difference)} وحدة`,
-            created_by: user?.id,
-          });
-          if (movErr) throw movErr;
-        }
-      } catch (itemError) {
-        // Rollback: reverse all successfully adjusted quantities
-        let rollbackFailed = false;
-        for (const adj of adjustedProducts) {
-          try {
-            const { error } = await (supabase.rpc as any)(
-              "adjust_product_quantity",
-              {
-                p_product_id: adj.product_id,
-                p_delta: -adj.delta,
-              },
-            );
-            if (error) throw error;
-          } catch (e: any) {
-            console.error("فشل التراجع عن كمية المنتج:", e);
-            rollbackFailed = true;
-          }
-        }
-        // Delete any movements created for this adjustment
-        try {
-          const { error } = await (supabase.from("inventory_movements") as any)
-            .delete()
-            .eq("reference_id", id)
-            .eq("reference_type", "adjustment");
-          if (error) throw error;
-        } catch (e: any) {
-          console.error("فشل حذف حركات المخزون:", e);
-          rollbackFailed = true;
-        }
-        // Delete journal entry if created
-        if (journalEntryId) {
-          try {
-            const { error } = await supabase
-              .from("journal_entry_lines")
-              .delete()
-              .eq("journal_entry_id", journalEntryId);
-            if (error) throw error;
-          } catch (e: any) {
-            console.error("فشل حذف سطور القيد:", e);
-            rollbackFailed = true;
-          }
-          try {
-            const { error } = await (supabase.from("journal_entries") as any)
-              .delete()
-              .eq("id", journalEntryId);
-            if (error) throw error;
-          } catch (e: any) {
-            console.error("فشل حذف القيد:", e);
-            rollbackFailed = true;
-          }
-        }
-        if (rollbackFailed) {
-          throw new Error(
-            "فشل الاعتماد وفشل التراجع — يرجى مراجعة البيانات يدوياً",
-          );
-        }
-        throw itemError;
-      }
-
-      // 5. Update adjustment status
-      await (supabase.from("inventory_adjustments") as any)
-        .update({ status: "approved", journal_entry_id: journalEntryId })
-        .eq("id", id);
-
-      setStatus("approved");
+      const requestId = postRequestId.current ?? crypto.randomUUID();
+      postRequestId.current = requestId;
+      const result = await postInventoryAdjustmentAtomic(id, requestId);
+      setStatus(result.status);
       setEditMode(false);
-      notify.success("تم اعتماد التسوية وتسجيل القيود بنجاح");
-    } catch (e: any) {
-      notify.error("خطأ في الاعتماد", e.message);
+      setApproveOpen(false);
+      postRequestId.current = null;
+      await loadData();
+      notify.success(result.repeated
+        ? "هذه التسوية مرحّلة بالفعل؛ لم تُنشأ حركة أو قيود مكررة"
+        : "رُحّلت التسوية والحركات والقيد في عملية واحدة");
+    } catch (error: any) {
+      notify.error("لم تُرحّل التسوية", error?.message || "تحقق من السجل قبل إعادة المحاولة");
     } finally {
       setSaving(false);
     }
   }
 
   async function handleCancelApproved() {
-    if (!id) return;
+    if (!id || saving || status !== "posted") return;
+    if (!reverseReason.trim()) {
+      notify.error("سبب الإلغاء مطلوب");
+      return;
+    }
     setSaving(true);
     try {
-      // 1. Reverse inventory quantities atomically via RPC
-      for (const item of items) {
-        if (item.difference === 0) continue;
-
-        const { error: qtyErr } = await (supabase.rpc as any)(
-          "adjust_product_quantity",
-          {
-            p_product_id: item.product_id,
-            p_delta: -item.difference, // reverse the difference
-          },
-        );
-        if (qtyErr) throw qtyErr;
-      }
-
-      // 2. Delete inventory movements for this adjustment (handle both possible reference_type values)
-      const { error: delErr1 } = await (
-        supabase.from("inventory_movements") as any
-      )
-        .delete()
-        .eq("reference_id", id)
-        .eq("reference_type", "adjustment");
-      if (delErr1) console.warn("Delete adjustment movements error:", delErr1);
-
-      // Also try with "inventory_adjustment" reference_type (legacy data)
-      const { error: delErr2 } = await (
-        supabase.from("inventory_movements") as any
-      )
-        .delete()
-        .eq("reference_id", id)
-        .eq("reference_type", "inventory_adjustment");
-      if (delErr2)
-        console.warn("Delete inventory_adjustment movements error:", delErr2);
-
-      // 3. Create REVERSE journal entry (not just cancel the original)
-      const { data: adj } = await (
-        supabase.from("inventory_adjustments") as any
-      )
-        .select("journal_entry_id")
-        .eq("id", id)
-        .single();
-
-      if (adj?.journal_entry_id) {
-        await createReverseJournalEntry({
-          sourceEntryId: adj.journal_entry_id,
-          entryDate: new Date().toISOString().split("T")[0],
-          description: `عكس تسوية مخزون - جرد رقم ADJ-${adjustmentNumber}`,
-        });
-      }
-
-      // 4. Update adjustment status to cancelled
-      await (supabase.from("inventory_adjustments") as any)
-        .update({ status: "cancelled" })
-        .eq("id", id);
-
-      setStatus("cancelled");
+      const requestId = reverseRequestId.current ?? crypto.randomUUID();
+      reverseRequestId.current = requestId;
+      const result = await reverseInventoryAdjustmentAtomic(id, requestId, reverseReason);
+      setStatus(result.status);
       setEditMode(false);
-      notify.success("تم إلغاء التسوية بنجاح", "تم استعادة كميات المخزون وتسجيل قيد عكسي");
-    } catch (e: any) {
-      notify.error("خطأ في إلغاء التسوية", e.message);
+      setReverseOpen(false);
+      setReverseReason("");
+      reverseRequestId.current = null;
+      await loadData();
+      notify.success(result.repeated
+        ? "هذه التسوية ملغاة بالفعل؛ لم يُنشأ أثر مكرر"
+        : "أُلغيت التسوية بحركة وقيد عكسيين دون حذف الأصل");
+    } catch (error: any) {
+      notify.error("لم تُلغَ التسوية", error?.message || "تحقق من السجل قبل إعادة المحاولة");
     } finally {
       setSaving(false);
     }
@@ -647,23 +394,26 @@ export default function InventoryAdjustmentForm() {
 
   const zeroDiffCount = zeroDifferenceProductCount;
   const hasZeroDiff = zeroDiffCount > 0;
+  const missingReasonCount = items.filter(
+    (item) => item.product_id && item.difference !== 0 && !item.notes.trim(),
+  ).length;
   function removeZeroDiffItems() {
     setItems((prev) => prev.filter((i) => !i.product_id || i.difference !== 0));
   }
 
   const isDraft = status === "draft";
-  const isApproved = status === "approved";
-  const isCancelled = status === "cancelled";
+  const isPosted = status === "posted";
   const isEditable = editMode && isDraft && canEdit;
   const statusLabels: Record<string, string> = {
     draft: "مسودة",
-    approved: "معتمد",
+    approved: "معتمد (قديم)",
+    posted: "مرحّل",
     cancelled: "ملغي",
   };
   const statusVariants: Record<
     string,
     "secondary" | "default" | "destructive"
-  > = { draft: "secondary", approved: "default", cancelled: "destructive" };
+  > = { draft: "secondary", approved: "default", posted: "default", cancelled: "destructive" };
 
   return (
     <div
@@ -786,45 +536,44 @@ export default function InventoryAdjustmentForm() {
           )}
           {!isNew && isDraft && canEdit && (
             <ConfirmDialog
+              open={approveOpen}
+              onOpenChange={setApproveOpen}
               trigger={
                 <Button
                   size="sm"
-                  disabled={saving || items.length === 0 || hasZeroDiff}
+                  disabled={saving || items.length === 0}
                   title={
-                    hasZeroDiff
-                      ? `لا يمكن الاعتماد — يوجد ${zeroDiffCount} بند بفرق صفر`
+                    isDirty ? "احفظ المسودة قبل الترحيل"
+                      : missingReasonCount > 0 ? "اكتب سبب الفرق في ملاحظات كل بند غير مطابق"
                       : undefined
                   }
                   className="gap-2 bg-primary hover:bg-primary/90 text-primary-foreground px-5"
                 >
                   <CheckCircle className="h-4 w-4" />
-                  اعتماد التسوية
+                  ترحيل التسوية
                 </Button>
               }
-              title="اعتماد التسوية"
-              description="سيتم تسجيل القيود المحاسبية وتحديث كميات المخزون. لا يمكن التراجع عن هذه العملية."
-              confirmText="اعتماد"
+              title="ترحيل التسوية"
+              description="ستُراجع كميات المنتجات والتكلفة والفترة داخل قاعدة البيانات، ثم تُحفظ الحركات والقيد والحالة معًا أو لا يُحفظ شيء. يمكن للمدير عكسها لاحقًا بحركة وقيد عكسيين."
+              confirmText="ترحيل الآن"
+              loading={saving}
+              confirmDisabled={isDirty || missingReasonCount > 0}
               onConfirm={handleApprove}
             >
-              {(totalLoss > 0 || totalGain > 0) && (
-                <div className="text-sm">
-                  {totalLoss > 0 && (
-                    <div className="text-destructive font-semibold">
-                      عجز: {formatCurrency(totalLoss)}
-                    </div>
-                  )}
-                  {totalGain > 0 && (
-                    <div className="text-green-600 mt-1 font-semibold">
-                      فائض: {formatCurrency(totalGain)}
-                    </div>
-                  )}
-                </div>
-              )}
+              <div className="space-y-2 text-sm">
+                {isDirty && <p className="text-destructive">احفظ تعديلات المسودة قبل الترحيل.</p>}
+                {missingReasonCount > 0 && (
+                  <p className="text-destructive">اكتب سبب الفرق في ملاحظات {missingReasonCount} من البنود ثم احفظ المسودة.</p>
+                )}
+                <p className="text-muted-foreground">المبالغ المعروضة في المسودة تقديرية؛ يعتمد الترحيل تكلفة الحركات المحسوبة خادميًا. البنود المطابقة لا تُنشئ حركة أو قيدًا.</p>
+              </div>
             </ConfirmDialog>
           )}
 
-          {!isNew && isApproved && role === "admin" && (
+          {!isNew && isPosted && role === "admin" && (
             <ConfirmDialog
+              open={reverseOpen}
+              onOpenChange={setReverseOpen}
               trigger={
                 <Button
                   variant="outline"
@@ -836,13 +585,25 @@ export default function InventoryAdjustmentForm() {
                   إلغاء التسوية
                 </Button>
               }
-              title="إلغاء التسوية المعتمدة"
-              description="سيتم استعادة كميات المخزون إلى ما قبل التسوية وإلغاء القيود المحاسبية المرتبطة. هل أنت متأكد؟"
+              title="عكس التسوية المرحّلة"
+              description="ستُنشأ حركة مخزون وقيد عكسيان، مع الاحتفاظ بالحركة والقيد الأصليين للتدقيق. قد يُرفض العكس إذا تغيرت البيانات أو لم تعد الكمية كافية."
               confirmText="إلغاء التسوية"
               cancelText="تراجع"
               destructive
+              loading={saving}
+              confirmDisabled={!reverseReason.trim()}
               onConfirm={handleCancelApproved}
-            />
+            >
+              <div className="space-y-2">
+                <Label htmlFor="inventory-adjustment-reverse-reason">سبب الإلغاء</Label>
+                <Input
+                  id="inventory-adjustment-reverse-reason"
+                  value={reverseReason}
+                  onChange={(event) => setReverseReason(event.target.value)}
+                  placeholder="اكتب سببًا واضحًا يُحفظ في سجل العملية"
+                />
+              </div>
+            </ConfirmDialog>
           )}
 
         </>}
@@ -1030,7 +791,7 @@ export default function InventoryAdjustmentForm() {
                           onKeyDown={(e) => handleLastFieldKeyDown(e, i, "qty")}
                           title={
                             item.product_id && item.difference === 0
-                              ? "فرق صفر — لن يُقبل عند الاعتماد"
+                              ? "فرق صفر — يُحفظ للمراجعة دون حركة أو قيد"
                               : undefined
                           }
                           className={cn(
@@ -1093,7 +854,7 @@ export default function InventoryAdjustmentForm() {
                           }}
                           onKeyDown={(e) => handleLastFieldKeyDown(e, i, "notes")}
                           className="text-xs bg-muted/30 border-border rounded-md h-8 w-full"
-                          placeholder="ملاحظة..."
+                          placeholder={item.difference === 0 ? "ملاحظة اختيارية" : "سبب الفرق (مطلوب)"}
                         />
                       ) : (
                         <span className="text-xs text-muted-foreground truncate block">

@@ -13,7 +13,7 @@ import { useNavigate } from "react-router-dom";
 import { useSettings } from "@/contexts/SettingsContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { ExportMenu } from "@/components/ExportMenu";
-import { INVOICE_STATUS_LABELS, INVOICE_STATUS_COLORS } from "@/lib/constants";
+import { INVOICE_STATUS_LABELS } from "@/lib/constants";
 import { notify } from "@/lib/notify";
 
 interface AdjustmentRow {
@@ -27,7 +27,7 @@ interface AdjustmentRow {
 
 const statusLabels: Record<string, string> = {
   ...INVOICE_STATUS_LABELS,
-  approved: "معتمد",
+  approved: "معتمد (قديم)",
 };
 
 export default function InventoryAdjustments() {
@@ -82,7 +82,7 @@ export default function InventoryAdjustments() {
   });
 
   const approvedCount = adjustments.filter(
-    (a) => a.status === "approved",
+    (a) => a.status === "approved" || a.status === "posted",
   ).length;
   const draftCount = adjustments.filter((a) => a.status === "draft").length;
 
@@ -216,7 +216,7 @@ export default function InventoryAdjustments() {
               <ClipboardCheck className="w-5 h-5 text-green-700 dark:text-green-400" />
             </div>
             <div>
-              <p className="text-xs text-muted-foreground">معتمدة</p>
+              <p className="text-xs text-muted-foreground">مرحّلة أو معتمدة قديمًا</p>
               <p className="text-xl font-black tabular-nums text-green-700 dark:text-green-400">
                 {approvedCount}
               </p>
