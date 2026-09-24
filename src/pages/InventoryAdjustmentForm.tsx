@@ -3,6 +3,7 @@ import { PageHeader } from "@/components/PageHeader";
 import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { postInventoryAdjustmentAtomic, reverseInventoryAdjustmentAtomic } from "@/lib/inventory-adjustment-atomic";
+import { formatInventoryAdjustmentNumber } from "@/lib/inventory-adjustment-number";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSettings } from "@/contexts/SettingsContext";
 import { useNavigationGuard } from "@/hooks/use-navigation-guard";
@@ -76,6 +77,7 @@ export default function InventoryAdjustmentForm() {
   const [isDirty, setIsDirty] = useState(false);
 
   const [adjustmentNumber, setAdjustmentNumber] = useState<number | null>(null);
+  const [postedNumber, setPostedNumber] = useState<number | null>(null);
   const [adjustmentDate, setAdjustmentDate] = useState(
     new Date().toISOString().split("T")[0],
   );
@@ -113,6 +115,7 @@ export default function InventoryAdjustmentForm() {
         .single();
       if (adj) {
         setAdjustmentNumber(adj.adjustment_number);
+        setPostedNumber(adj.posted_number ?? null);
         setAdjustmentDate(adj.adjustment_date);
         setDescription(adj.description || "");
         setStatus(adj.status);
@@ -133,6 +136,7 @@ export default function InventoryAdjustmentForm() {
                     it.products.name,
                     it.products.product_brands?.name,
                     it.products.model_number,
+                    it.products.code,
                   )
                 : "",
               system_quantity: Number(it.system_quantity),
@@ -208,7 +212,7 @@ export default function InventoryAdjustmentForm() {
     updated[idx] = {
       ...updated[idx],
       product_id: productId,
-      product_name: formatProductName(product),
+      product_name: formatProductName(product, { withCode: true }),
       system_quantity: product.quantity_on_hand,
       actual_quantity: product.quantity_on_hand,
       difference: 0,
@@ -403,6 +407,9 @@ export default function InventoryAdjustmentForm() {
 
   const isDraft = status === "draft";
   const isPosted = status === "posted";
+  const displayNumber = adjustmentNumber === null
+    ? null
+    : formatInventoryAdjustmentNumber(status, adjustmentNumber, postedNumber);
   const isEditable = editMode && isDraft && canEdit;
   const statusLabels: Record<string, string> = {
     draft: "مسودة",
@@ -426,9 +433,9 @@ export default function InventoryAdjustmentForm() {
         title={isNew ? "إنشاء تسوية مخزون" : "تسوية مخزون"}
         description="مقارنة الكميات الفعلية بكميات النظام وتسجيل الفروقات"
         badge={<>
-          {!isNew && adjustmentNumber && (
+          {!isNew && displayNumber && (
             <span className="text-sm font-semibold text-muted-foreground border border-border px-3 py-1 rounded-lg bg-muted/50 font-mono tabular-nums">
-              ADJ-{adjustmentNumber}
+              {displayNumber}
             </span>
           )}
           {!isNew && (
@@ -444,9 +451,9 @@ export default function InventoryAdjustmentForm() {
           {!isNew && items.length > 0 && (
             <ExportMenu
               config={{
-                filenamePrefix: `inventory-adjustment-ADJ-${adjustmentNumber ?? ""}`,
-                sheetName: `تسوية ADJ-${adjustmentNumber ?? ""}`,
-                pdfTitle: `تسوية مخزون ADJ-${adjustmentNumber ?? ""}`,
+                filenamePrefix: `inventory-adjustment-${displayNumber ?? "new"}`,
+                sheetName: `تسوية ${displayNumber ?? "جديدة"}`,
+                pdfTitle: `تسوية مخزون ${displayNumber ?? "جديدة"}`,
                 pdfOrientation: "landscape",
                 headers: [
                   "#",
@@ -609,6 +616,13 @@ export default function InventoryAdjustmentForm() {
         </>}
       />
 
+      {isDraft && displayNumber && (
+        <div className="rounded-xl border border-primary/20 bg-primary/5 px-4 py-3 text-sm text-muted-foreground">
+          <span className="font-semibold text-foreground">{displayNumber} رقم مسودة مؤقت.</span>{" "}
+          يُمنح رقم ADJ الرسمي عند نجاح الترحيل فقط؛ حذف المسودة لا يستهلك رقمًا رسميًا.
+        </div>
+      )}
+
       {/* ── Adjustment Details Card ── */}
       <div className="bg-card p-6 rounded-2xl border shadow-sm">
         <div className="mb-5">
@@ -674,17 +688,17 @@ export default function InventoryAdjustmentForm() {
         {/* Table */}
         <div className="overflow-x-auto">
           <table
-            className="w-full text-right border-collapse"
+            className="w-full min-w-[1080px] text-right border-collapse"
             style={{ tableLayout: "fixed" }}
           >
             <colgroup>
-              <col style={{ width: "3%" }} />
-              <col style={{ width: "28%" }} />
-              <col style={{ width: "11%" }} />
-              <col style={{ width: "11%" }} />
+              <col style={{ width: "4%" }} />
+              <col style={{ width: "30%" }} />
               <col style={{ width: "10%" }} />
-              <col style={{ width: "12%" }} />
-              <col style={{ width: "12%" }} />
+              <col style={{ width: "10%" }} />
+              <col style={{ width: "8%" }} />
+              <col style={{ width: "11%" }} />
+              <col style={{ width: "11%" }} />
               <col style={{ width: "13%" }} />
               {isEditable && <col style={{ width: "3%" }} />}
             </colgroup>
@@ -762,13 +776,13 @@ export default function InventoryAdjustmentForm() {
                                   (other, oi) =>
                                     oi !== i && other.product_id === p.id,
                                 ),
-                            ),
+                            ), false, true,
                           )}
                           placeholder="اختر المنتج"
                         />
                       ) : (
                         <span
-                          className="font-medium text-sm block truncate"
+                          className="font-medium text-sm block line-clamp-2 break-words"
                           title={item.product_name}
                         >
                           {item.product_name}

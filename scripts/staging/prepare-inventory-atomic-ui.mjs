@@ -7,7 +7,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const repo = fileURLToPath(new URL("../../", import.meta.url));
-const expectedHead = "1d6bf86ae0a0832e96841f3280d704941bc4b63f";
+const expectedHead = "33e01f5815d9609a573dbf5a638eab49ef6968c9";
 const stagingRef = "dunzfxurefzlaamgghys";
 const stagingUrl = `https://${stagingRef}.supabase.co`;
 const liveRoot = "/var/www/staging.alibea2020.com";
@@ -15,6 +15,7 @@ const overlay = [
   "src/pages/InventoryAdjustmentForm.tsx",
   "src/pages/InventoryAdjustments.tsx",
   "src/lib/inventory-adjustment-atomic.ts",
+  "src/lib/inventory-adjustment-number.ts",
 ];
 
 function run(command, args, options={}) {

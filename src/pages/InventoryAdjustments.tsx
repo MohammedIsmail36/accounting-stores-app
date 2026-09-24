@@ -15,10 +15,12 @@ import { useAuth } from "@/contexts/AuthContext";
 import { ExportMenu } from "@/components/ExportMenu";
 import { INVOICE_STATUS_LABELS } from "@/lib/constants";
 import { notify } from "@/lib/notify";
+import { formatInventoryAdjustmentNumber } from "@/lib/inventory-adjustment-number";
 
 interface AdjustmentRow {
   id: string;
   adjustment_number: number;
+  posted_number: number | null;
   adjustment_date: string;
   description: string | null;
   status: string;
@@ -94,7 +96,7 @@ export default function InventoryAdjustments() {
       ),
       cell: ({ row }) => (
         <span className="font-mono font-semibold tabular-nums text-primary">
-          ADJ-{row.original.adjustment_number}
+          {formatInventoryAdjustmentNumber(row.original.status, row.original.adjustment_number, row.original.posted_number)}
         </span>
       ),
     },
@@ -175,7 +177,7 @@ export default function InventoryAdjustments() {
                 pdfTitle: "تقرير تسويات المخزون",
                 headers: ["رقم التسوية", "التاريخ", "الوصف", "الحالة"],
                 rows: adjustments.map((a) => [
-                  `ADJ-${a.adjustment_number}`,
+                  formatInventoryAdjustmentNumber(a.status, a.adjustment_number, a.posted_number),
                   a.adjustment_date,
                   a.description || "—",
                   statusLabels[a.status] || a.status,

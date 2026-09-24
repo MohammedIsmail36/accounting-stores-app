@@ -3,10 +3,14 @@ import { supabase } from "@/integrations/supabase/client";
 type VarianceRpcName =
   | "post_inventory_adjustment_atomic"
   | "reverse_inventory_adjustment_atomic";
-const varianceRpc = supabase.rpc as unknown as (
-  name: VarianceRpcName,
-  args: Record<string, string>,
-) => Promise<{ data: unknown; error: Error | null }>;
+function varianceRpc(name: VarianceRpcName, args: Record<string, string>) {
+  // Keep the Supabase client as the method receiver. An extracted `rpc` method
+  // loses `this.rest` at runtime before a request is sent.
+  return supabase.rpc(name as never, args as never) as Promise<{
+    data: unknown;
+    error: Error | null;
+  }>;
+}
 
 export type InventoryAdjustmentAtomicResult = {
   status: "posted" | "cancelled";

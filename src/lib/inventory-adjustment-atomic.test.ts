@@ -2,7 +2,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const rpc = vi.fn();
 vi.mock("@/integrations/supabase/client", () => ({
-  supabase: { rpc: (...args: unknown[]) => rpc(...args) },
+  supabase: {
+    rpc(this: { rpc: unknown } | undefined, ...args: unknown[]) {
+      if (!this?.rpc) throw new TypeError("Cannot read properties of undefined (reading 'rest')");
+      return rpc(...args);
+    },
+  },
 }));
 
 const { postInventoryAdjustmentAtomic, reverseInventoryAdjustmentAtomic } =
