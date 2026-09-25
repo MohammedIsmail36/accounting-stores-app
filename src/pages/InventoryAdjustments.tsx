@@ -1,34 +1,20 @@
 import { useEffect } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { PageHeader } from "@/components/PageHeader";
-import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { StatusBadge } from "@/components/StatusBadge";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { DataTable, DataTableColumnHeader } from "@/components/ui/data-table";
 import { ColumnDef } from "@tanstack/react-table";
-import { Plus, ClipboardCheck, ClipboardList, Trash2 } from "lucide-react";
+import { Plus, ClipboardCheck, ClipboardList } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useSettings } from "@/contexts/SettingsContext";
-import { useAuth } from "@/contexts/AuthContext";
 import { ExportMenu } from "@/components/ExportMenu";
 import { INVOICE_STATUS_LABELS } from "@/lib/constants";
 import { notify } from "@/lib/notify";
 import { formatInventoryAdjustmentNumber } from "@/lib/inventory-adjustment-number";
-import { deleteInventoryAdjustmentDraft } from "@/lib/inventory-adjustment-delete";
-import { inventoryAdjustmentsQueryKey, removeDeletedInventoryAdjustmentFromCache } from "@/lib/inventory-adjustment-cache";
-
-interface AdjustmentRow {
-  id: string;
-  adjustment_number: number;
-  posted_number: number | null;
-  adjustment_date: string;
-  description: string | null;
-  status: string;
-  created_at: string;
-  updated_at: string;
-}
+import { inventoryAdjustmentsQueryKey, type InventoryAdjustmentListRow } from "@/lib/inventory-adjustment-cache";
 
 const statusLabels: Record<string, string> = {
   ...INVOICE_STATUS_LABELS,
@@ -37,9 +23,7 @@ const statusLabels: Record<string, string> = {
 
 export default function InventoryAdjustments() {
   const navigate = useNavigate();
-  const { role } = useAuth();
   const { settings } = useSettings();
-  const queryClient = useQueryClient();
 
   const {
     data: adjustments = [],
@@ -54,7 +38,7 @@ export default function InventoryAdjustments() {
         .select("*")
         .order("adjustment_number", { ascending: false });
       if (error) throw error;
-      return data as AdjustmentRow[];
+      return data as InventoryAdjustmentListRow[];
     },
   });
 
@@ -64,22 +48,12 @@ export default function InventoryAdjustments() {
     }
   }, [isError]);
 
-  const deleteMutation = useMutation({
-    mutationFn: ({ id, updatedAt }: { id: string; updatedAt: string }) =>
-      deleteInventoryAdjustmentDraft(id, updatedAt),
-    onSuccess: (_data, { id }) => {
-      removeDeletedInventoryAdjustmentFromCache(queryClient, id);
-      notify.success("تم حذف التسوية بنجاح");
-    },
-    onError: (error: Error) => notify.error("لم تُحذف المسودة", error.message),
-  });
-
   const approvedCount = adjustments.filter(
     (a) => a.status === "approved" || a.status === "posted",
   ).length;
   const draftCount = adjustments.filter((a) => a.status === "draft").length;
 
-  const columns: ColumnDef<AdjustmentRow, any>[] = [
+  const columns: ColumnDef<InventoryAdjustmentListRow, any>[] = [
     {
       accessorKey: "adjustment_number",
       header: ({ column }) => (
@@ -122,34 +96,6 @@ export default function InventoryAdjustments() {
         />
       ),
 
-    },
-    {
-      id: "actions",
-      header: "",
-      cell: ({ row }) => (
-        <div className="flex gap-1 justify-end">
-          {row.original.status === "draft" && role === "admin" && (
-            <ConfirmDialog
-              trigger={
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="text-destructive hover:text-destructive hover:bg-destructive/10 h-8 w-8 p-0"
-                  aria-label="حذف التسوية"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </Button>
-              }
-              title="حذف التسوية"
-              description="هل أنت متأكد من حذف هذه التسوية؟ لا يمكن التراجع عن هذا الإجراء."
-              confirmText="حذف"
-              destructive
-              onConfirm={() => deleteMutation.mutate({ id: row.original.id, updatedAt: row.original.updated_at })}
-            />
-
-          )}
-        </div>
-      ),
     },
   ];
 

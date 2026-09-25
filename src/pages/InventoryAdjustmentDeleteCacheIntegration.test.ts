@@ -6,8 +6,6 @@ const form = readFileSync(join(process.cwd(), "src/pages/InventoryAdjustmentForm
 const list = readFileSync(join(process.cwd(), "src/pages/InventoryAdjustments.tsx"), "utf8");
 const deleteForm = form.split("  async function handleDeleteDraft() {")[1]
   ?.split("  async function handleApprove() {")[0];
-const deleteList = list.split("  const deleteMutation = useMutation({")[1]
-  ?.split("  const approvedCount =")[0];
 
 describe("انتقال واجهة التسويات بعد الحذف", () => {
   it("يحدث الكاش بعد نجاح الحذف وقبل الانتقال من صفحة التفاصيل", () => {
@@ -16,8 +14,10 @@ describe("انتقال واجهة التسويات بعد الحذف", () => {
     expect(deleteForm?.indexOf("removeDeletedInventoryAdjustmentFromCache"))
       .toBeLessThan(deleteForm!.indexOf('navigate("/inventory-adjustments")'));
   });
-  it("يحدث نفس الكاش عند الحذف من القائمة ويستخدم مفتاح الاستعلام نفسه", () => {
+  it("لا يعرض زر حذف داخل صف القائمة المتداخل مع فتح المسودة", () => {
     expect(list).toContain("queryKey: inventoryAdjustmentsQueryKey");
-    expect(deleteList).toContain("removeDeletedInventoryAdjustmentFromCache(queryClient, id)");
+    expect(list).toContain("onRowClick={(row) => navigate(");
+    expect(list).not.toContain('id: "actions"');
+    expect(list).not.toContain("deleteMutation");
   });
 });

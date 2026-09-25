@@ -6,7 +6,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { postInventoryAdjustmentAtomic, reverseInventoryAdjustmentAtomic } from "@/lib/inventory-adjustment-atomic";
 import { saveInventoryAdjustmentDraft } from "@/lib/inventory-adjustment-draft";
 import { deleteInventoryAdjustmentDraft } from "@/lib/inventory-adjustment-delete";
-import { clearInventoryAdjustmentsCacheAfterSave, removeDeletedInventoryAdjustmentFromCache } from "@/lib/inventory-adjustment-cache";
+import { upsertSavedInventoryAdjustmentInCache, removeDeletedInventoryAdjustmentFromCache } from "@/lib/inventory-adjustment-cache";
 import { formatInventoryAdjustmentNumber } from "@/lib/inventory-adjustment-number";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSettings } from "@/contexts/SettingsContext";
@@ -288,7 +288,13 @@ export default function InventoryAdjustmentForm() {
       });
       setAdjustmentNumber(result.adjustment_number);
       setLoadedUpdatedAt(result.updated_at);
-      clearInventoryAdjustmentsCacheAfterSave(queryClient);
+      upsertSavedInventoryAdjustmentInCache(queryClient, {
+        id: result.adjustment_id,
+        adjustmentNumber: result.adjustment_number,
+        updatedAt: result.updated_at,
+        adjustmentDate,
+        description,
+      });
       notify.success("تم حفظ المسودة وبنودها معًا");
       setIsDirty(false); navGuard.allowNext();
       navigate(`/inventory-adjustments/${result.adjustment_id}`);
