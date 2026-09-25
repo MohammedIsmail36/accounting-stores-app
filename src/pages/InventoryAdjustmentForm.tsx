@@ -3,6 +3,7 @@ import { PageHeader } from "@/components/PageHeader";
 import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { postInventoryAdjustmentAtomic, reverseInventoryAdjustmentAtomic } from "@/lib/inventory-adjustment-atomic";
+import { saveInventoryAdjustmentDraft } from "@/lib/inventory-adjustment-draft";
 import { formatInventoryAdjustmentNumber } from "@/lib/inventory-adjustment-number";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSettings } from "@/contexts/SettingsContext";
@@ -66,7 +67,7 @@ interface AdjustmentItem {
 export default function InventoryAdjustmentForm() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { user, role } = useAuth();
+  const { role } = useAuth();
   const { settings, formatCurrency } = useSettings();
   const isNew = !id;
   const canEdit = role === "admin" || role === "accountant";
@@ -78,6 +79,7 @@ export default function InventoryAdjustmentForm() {
 
   const [adjustmentNumber, setAdjustmentNumber] = useState<number | null>(null);
   const [postedNumber, setPostedNumber] = useState<number | null>(null);
+  const [loadedUpdatedAt, setLoadedUpdatedAt] = useState<string | null>(null);
   const [adjustmentDate, setAdjustmentDate] = useState(
     new Date().toISOString().split("T")[0],
   );
@@ -116,6 +118,7 @@ export default function InventoryAdjustmentForm() {
       if (adj) {
         setAdjustmentNumber(adj.adjustment_number);
         setPostedNumber(adj.posted_number ?? null);
+        setLoadedUpdatedAt(adj.updated_at);
         setAdjustmentDate(adj.adjustment_date);
         setDescription(adj.description || "");
         setStatus(adj.status);
@@ -249,8 +252,15 @@ export default function InventoryAdjustmentForm() {
   async function handleSave() {
     if (saving) return;
     const errors: Record<string, string> = {};
-    if (items.length === 0) errors.items = "أضف منتج واحد على الأقل";
-    if (items.some((i) => !i.product_id)) errors.items = "اختر المنتج لكل بند";
+    const productIds = items.filter((item) => item.product_id).map((item) => item.product_id);
+    if (items.length === 0) errors.items = "أضف منتجًا واحدًا على الأقل";
+    else if (items.some((item) => !item.product_id)) errors.items = "اختر المنتج لكل بند";
+    else if (new Set(productIds).size !== productIds.length) errors.items = "لا تكرر المنتج نفسه في التسوية";
+    else if (items.some((item) => !Number.isFinite(item.system_quantity)
+      || !Number.isFinite(item.actual_quantity) || !Number.isFinite(item.unit_cost)
+      || item.actual_quantity < 0 || item.unit_cost < 0)) {
+      errors.items = "راجع الكميات والتكلفة في البنود";
+    }
     setFieldErrors(errors);
     if (Object.keys(errors).length > 0) {
       notify.error("تنبيه", Object.values(errors)[0]);
@@ -259,50 +269,26 @@ export default function InventoryAdjustmentForm() {
 
     setSaving(true);
     try {
-      let adjId = id;
-      if (isNew) {
-        const { data, error } = await (
-          supabase.from("inventory_adjustments") as any
-        )
-          .insert({
-            adjustment_date: adjustmentDate,
-            description,
-            created_by: user?.id,
-          })
-          .select()
-          .single();
-        if (error) throw error;
-        adjId = data.id;
-      } else {
-        await (supabase.from("inventory_adjustments") as any)
-          .update({ adjustment_date: adjustmentDate, description })
-          .eq("id", adjId);
-        await (supabase.from("inventory_adjustment_items") as any)
-          .delete()
-          .eq("adjustment_id", adjId);
-      }
-
-      const rows = items.map((i) => ({
-        adjustment_id: adjId,
-        product_id: i.product_id,
-        system_quantity: i.system_quantity,
-        actual_quantity: i.actual_quantity,
-        difference: i.difference,
-        unit_cost: i.unit_cost,
-        total_cost: i.total_cost,
-        notes: i.notes || null,
-      }));
-
-      const { error: itemsErr } = await (
-        supabase.from("inventory_adjustment_items") as any
-      ).insert(rows);
-      if (itemsErr) throw itemsErr;
-
-      notify.success("تم حفظ التسوية بنجاح");
+      const result = await saveInventoryAdjustmentDraft({
+        id: id ?? null,
+        expectedUpdatedAt: id ? loadedUpdatedAt : null,
+        date: adjustmentDate,
+        description,
+        items: items.map((item) => ({
+          product_id: item.product_id,
+          system_quantity: item.system_quantity,
+          actual_quantity: item.actual_quantity,
+          unit_cost: item.unit_cost,
+          notes: item.notes,
+        })),
+      });
+      setAdjustmentNumber(result.adjustment_number);
+      setLoadedUpdatedAt(result.updated_at);
+      notify.success("تم حفظ المسودة وبنودها معًا");
       setIsDirty(false); navGuard.allowNext();
-      navigate(`/inventory-adjustments/${adjId}`);
-    } catch (e: any) {
-      notify.error("خطأ في الحفظ", e.message);
+      navigate(`/inventory-adjustments/${result.adjustment_id}`);
+    } catch (error: any) {
+      notify.error("لم تُحفظ المسودة", error?.message || "تحقق من المسودة قبل المحاولة مجددًا");
     } finally {
       setSaving(false);
     }
