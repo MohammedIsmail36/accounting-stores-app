@@ -8,6 +8,13 @@ import { saveInventoryAdjustmentDraft } from "@/lib/inventory-adjustment-draft";
 import { deleteInventoryAdjustmentDraft } from "@/lib/inventory-adjustment-delete";
 import { upsertSavedInventoryAdjustmentInCache, removeDeletedInventoryAdjustmentFromCache } from "@/lib/inventory-adjustment-cache";
 import { formatInventoryAdjustmentNumber } from "@/lib/inventory-adjustment-number";
+import {
+  INVENTORY_ADJUSTMENT_REASONS,
+  inventoryAdjustmentReasonLabel,
+  inventoryAdjustmentReasonNeedsSourceReference,
+  isInventoryAdjustmentReasonCode,
+  type InventoryAdjustmentReasonCode,
+} from "@/lib/inventory-adjustment-reasons";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSettings } from "@/contexts/SettingsContext";
 import { useNavigationGuard } from "@/hooks/use-navigation-guard";
@@ -65,6 +72,8 @@ interface AdjustmentItem {
   unit_cost: number;
   total_cost: number;
   notes: string;
+  reason_code: InventoryAdjustmentReasonCode | "";
+  reason_reference: string;
 }
 
 export default function InventoryAdjustmentForm() {
@@ -152,6 +161,8 @@ export default function InventoryAdjustmentForm() {
               unit_cost: Number(it.unit_cost),
               total_cost: Number(it.total_cost),
               notes: it.notes || "",
+              reason_code: isInventoryAdjustmentReasonCode(it.reason_code) ? it.reason_code : "",
+              reason_reference: it.reason_reference || "",
             })),
           );
         }
@@ -174,6 +185,8 @@ export default function InventoryAdjustmentForm() {
         unit_cost: 0,
         total_cost: 0,
         notes: "",
+        reason_code: "",
+        reason_reference: "",
       },
     ]);
     // Auto-open the product combobox in the newly added row (matches invoice UX)
@@ -225,6 +238,9 @@ export default function InventoryAdjustmentForm() {
       difference: 0,
       unit_cost: cost,
       total_cost: 0,
+      notes: "",
+      reason_code: "",
+      reason_reference: "",
     };
     setItems(updated);
   }
@@ -239,6 +255,10 @@ export default function InventoryAdjustmentForm() {
     updated[idx].actual_quantity = val;
     updated[idx].difference = difference;
     updated[idx].total_cost = totalCost;
+    if (difference === 0) {
+      updated[idx].reason_code = "";
+      updated[idx].reason_reference = "";
+    }
     setItems(updated);
   }
 
@@ -265,6 +285,12 @@ export default function InventoryAdjustmentForm() {
       || item.actual_quantity < 0 || item.unit_cost < 0)) {
       errors.items = "راجع الكميات والتكلفة في البنود";
     }
+    else if (items.some((item) => item.difference !== 0 && (
+      !isInventoryAdjustmentReasonCode(item.reason_code)
+      || !item.notes.trim()
+      || (inventoryAdjustmentReasonNeedsSourceReference(item.reason_code as InventoryAdjustmentReasonCode)
+        && !item.reason_reference.trim())
+    ))) errors.items = "حدد سببًا واكتب شرحًا لكل فرق، ومرجع المستند عند تصحيح خطأ سابق";
     setFieldErrors(errors);
     if (Object.keys(errors).length > 0) {
       notify.error("تنبيه", Object.values(errors)[0]);
@@ -284,6 +310,8 @@ export default function InventoryAdjustmentForm() {
           actual_quantity: item.actual_quantity,
           unit_cost: item.unit_cost,
           notes: item.notes,
+          reason_code: item.reason_code || null,
+          reason_reference: item.reason_reference.trim() || null,
         })),
       });
       setAdjustmentNumber(result.adjustment_number);
@@ -331,8 +359,12 @@ export default function InventoryAdjustmentForm() {
       notify.error("بنود غير مكتملة", "أضف منتجًا واحدًا على الأقل لكل بند");
       return;
     }
-    if (items.some((item) => item.difference !== 0 && !item.notes.trim())) {
-      notify.error("سبب الفرق مطلوب", "اكتب سبب الفرق في ملاحظات كل بند ذي فرق");
+    if (items.some((item) => item.difference !== 0 && (
+      !isInventoryAdjustmentReasonCode(item.reason_code)
+      || !item.notes.trim()
+      || (item.reason_code === "prior_entry_error" && !item.reason_reference.trim())
+    ))) {
+      notify.error("سبب الفرق مطلوب", "حدد سببًا واكتب شرحًا ومرجعًا عند الحاجة لكل بند ذي فرق");
       return;
     }
     if (settings?.locked_until_date && adjustmentDate <= settings.locked_until_date) {
@@ -392,7 +424,11 @@ export default function InventoryAdjustmentForm() {
   const zeroDiffCount = zeroDifferenceProductCount;
   const hasZeroDiff = zeroDiffCount > 0;
   const missingReasonCount = items.filter(
-    (item) => item.product_id && item.difference !== 0 && !item.notes.trim(),
+    (item) => item.product_id && item.difference !== 0 && (
+      !isInventoryAdjustmentReasonCode(item.reason_code)
+      || !item.notes.trim()
+      || (item.reason_code === "prior_entry_error" && !item.reason_reference.trim())
+    ),
   ).length;
   function removeZeroDiffItems() {
     setItems((prev) => prev.filter((i) => !i.product_id || i.difference !== 0));
@@ -457,6 +493,8 @@ export default function InventoryAdjustmentForm() {
                   "الفرق",
                   "متوسط التكلفة",
                   "إجمالي الفرق",
+                  "سبب الفرق",
+                  "مرجع السبب",
                   "ملاحظات",
                 ],
                 rows: items.map((it, i) => [
@@ -468,6 +506,8 @@ export default function InventoryAdjustmentForm() {
                   (it.difference > 0 ? "+" : "") + it.difference,
                   Number(it.unit_cost).toFixed(2),
                   Number(it.total_cost).toFixed(2),
+                  inventoryAdjustmentReasonLabel(it.reason_code) || "—",
+                  it.reason_reference || "—",
                   it.notes || "—",
                 ]),
                 summaryCards: [
@@ -544,7 +584,7 @@ export default function InventoryAdjustmentForm() {
                   disabled={saving || items.length === 0}
                   title={
                     isDirty ? "احفظ المسودة قبل الترحيل"
-                      : missingReasonCount > 0 ? "اكتب سبب الفرق في ملاحظات كل بند غير مطابق"
+                      : missingReasonCount > 0 ? "حدد سببًا واكتب شرحًا لكل بند غير مطابق"
                       : undefined
                   }
                   className="gap-2 bg-primary hover:bg-primary/90 text-primary-foreground px-5"
@@ -563,7 +603,7 @@ export default function InventoryAdjustmentForm() {
               <div className="space-y-2 text-sm">
                 {isDirty && <p className="text-destructive">احفظ تعديلات المسودة قبل الترحيل.</p>}
                 {missingReasonCount > 0 && (
-                  <p className="text-destructive">اكتب سبب الفرق في ملاحظات {missingReasonCount} من البنود ثم احفظ المسودة.</p>
+                  <p className="text-destructive">حدد السبب واكتب الشرح في {missingReasonCount} من البنود ثم احفظ المسودة.</p>
                 )}
                 <p className="text-muted-foreground">المبالغ المعروضة في المسودة تقديرية؛ يعتمد الترحيل تكلفة الحركات المحسوبة خادميًا. البنود المطابقة لا تُنشئ حركة أو قيدًا.</p>
               </div>
@@ -719,7 +759,7 @@ export default function InventoryAdjustmentForm() {
                   إجمالي الفرق
                 </th>
                 <th className="py-2 px-3 font-medium text-muted-foreground text-xs text-center">
-                  ملاحظات
+                  السبب والملاحظات
                 </th>
                 {isEditable && <th className="py-2 px-2" />}
               </tr>
@@ -852,21 +892,58 @@ export default function InventoryAdjustmentForm() {
 
                     <td className="py-2 px-3">
                       {isEditable ? (
-                        <Input
-                          value={item.notes}
-                          onChange={(e) => {
-                            const u = [...items];
-                            u[i].notes = e.target.value;
-                            setItems(u);
-                          }}
-                          onKeyDown={(e) => handleLastFieldKeyDown(e, i, "notes")}
-                          className="text-xs bg-muted/30 border-border rounded-md h-8 w-full"
-                          placeholder={item.difference === 0 ? "ملاحظة اختيارية" : "سبب الفرق (مطلوب)"}
-                        />
+                        <div className="space-y-1">
+                          <select
+                            value={item.reason_code}
+                            onChange={(e) => {
+                              const u = [...items];
+                              u[i].reason_code = e.target.value as InventoryAdjustmentReasonCode | "";
+                              if (u[i].reason_code !== "prior_entry_error") u[i].reason_reference = "";
+                              setItems(u);
+                            }}
+                            disabled={item.difference === 0}
+                            aria-label="سبب فرق المخزون"
+                            className="h-8 w-full rounded-md border border-border bg-background px-2 text-xs"
+                          >
+                            <option value="">اختر السبب</option>
+                            {INVENTORY_ADJUSTMENT_REASONS.map((reason) => (
+                              <option key={reason.code} value={reason.code}>{reason.label}</option>
+                            ))}
+                          </select>
+                          {item.reason_code === "prior_entry_error" && (
+                            <Input
+                              value={item.reason_reference}
+                              onChange={(e) => {
+                                const u = [...items];
+                                u[i].reason_reference = e.target.value;
+                                setItems(u);
+                              }}
+                              className="h-8 text-xs"
+                              placeholder="مرجع المستند الأصلي"
+                              aria-label="مرجع سبب الفرق"
+                            />
+                          )}
+                          <Input
+                            value={item.notes}
+                            onChange={(e) => {
+                              const u = [...items];
+                              u[i].notes = e.target.value;
+                              setItems(u);
+                            }}
+                            onKeyDown={(e) => handleLastFieldKeyDown(e, i, "notes")}
+                            className="text-xs bg-muted/30 border-border rounded-md h-8 w-full"
+                            placeholder={item.difference === 0 ? "ملاحظة اختيارية" : "شرح الفرق (مطلوب)"}
+                          />
+                        </div>
                       ) : (
-                        <span className="text-xs text-muted-foreground truncate block">
-                          {item.notes || "—"}
-                        </span>
+                        <div className="space-y-0.5 text-xs text-muted-foreground">
+                          <span className="block font-medium text-foreground">
+                            {inventoryAdjustmentReasonLabel(item.reason_code)
+                              ?? (item.difference !== 0 ? "سبب قديم غير مصنف" : "—")}
+                          </span>
+                          {item.reason_reference && <span className="block truncate">{item.reason_reference}</span>}
+                          {item.notes && <span className="block truncate">{item.notes}</span>}
+                        </div>
                       )}
                     </td>
 

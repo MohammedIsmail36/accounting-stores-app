@@ -14,7 +14,8 @@ const { saveInventoryAdjustmentDraft } = await import("./inventory-adjustment-dr
 const input = {
   id: null, expectedUpdatedAt: null, date: "2026-09-25", description: "اختبار",
   items: [{ product_id: "product-1", system_quantity: 5,
-    actual_quantity: 6, unit_cost: 108, notes: "فائض" }],
+    actual_quantity: 6, unit_cost: 108, notes: "فائض",
+    reason_code: "found_stock", reason_reference: null }],
 };
 
 beforeEach(() => rpc.mockReset());
@@ -26,7 +27,7 @@ describe("حفظ مسودة التسوية الذري", () => {
     rpc.mockResolvedValue({ data: result, error: null });
     expect(await saveInventoryAdjustmentDraft(input)).toEqual(result);
     expect(rpc).toHaveBeenCalledOnce();
-    expect(rpc).toHaveBeenCalledWith("save_inventory_adjustment_draft", {
+    expect(rpc).toHaveBeenCalledWith("save_inventory_adjustment_draft_with_reasons", {
       p_adjustment_id: null, p_expected_updated_at: null,
       p_adjustment_date: "2026-09-25", p_description: "اختبار",
       p_items: input.items,

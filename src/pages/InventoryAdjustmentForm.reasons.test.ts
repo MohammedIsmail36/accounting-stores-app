@@ -1,0 +1,25 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { describe, expect, it } from "vitest";
+
+const source = readFileSync(join(process.cwd(), "src/pages/InventoryAdjustmentForm.tsx"), "utf8");
+const save = source.split("  async function handleSave() {")[1]
+  ?.split("  async function handleDeleteDraft() {")[0];
+
+describe("سبب فرق التسوية في الواجهة", () => {
+  it("يحفظ الرمز والمرجع داخل الطلب الذري نفسه ولا ينشئ طلب كتابة منفصلًا", () => {
+    expect(save).toContain("reason_code: item.reason_code || null");
+    expect(save).toContain("reason_reference: item.reason_reference.trim() || null");
+    expect(save).toContain("saveInventoryAdjustmentDraft({");
+    expect(save).not.toContain(".insert(");
+    expect(save).not.toContain(".update(");
+  });
+
+  it("يعرض الأسباب في عمود موجود ويُبقي القديم غير المصنف للقراءة", () => {
+    expect(source).toContain("INVENTORY_ADJUSTMENT_REASONS.map");
+    expect(source).toContain("سبب قديم غير مصنف");
+    expect(source).toContain("inventoryAdjustmentReasonLabel(it.reason_code)");
+    expect(source).toContain("reason_reference: it.reason_reference ||");
+    expect(source).toContain("السبب والملاحظات");
+  });
+});

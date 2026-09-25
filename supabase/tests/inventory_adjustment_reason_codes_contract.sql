@@ -31,14 +31,18 @@ BEGIN
   END IF;
 
   SELECT pg_get_functiondef(
-    'public.save_inventory_adjustment_draft(uuid,timestamptz,date,text,jsonb)'::regprocedure
+    'public.save_inventory_adjustment_draft_with_reasons(uuid,timestamptz,date,text,jsonb)'::regprocedure
   ) INTO v_save;
   SELECT pg_get_functiondef(
-    'public.post_inventory_adjustment_atomic(uuid,uuid)'::regprocedure
+    'public.fn_require_inventory_adjustment_reason_on_post()'::regprocedure
   ) INTO v_post;
   IF v_save NOT LIKE '%reason_code%'
      OR v_save NOT LIKE '%reason_reference%'
-     OR v_post NOT LIKE '%reason_code%' THEN
+     OR v_post NOT LIKE '%reason_code%'
+     OR NOT EXISTS (SELECT 1 FROM pg_trigger
+       WHERE tgrelid = 'public.inventory_adjustments'::regclass
+         AND tgname = 'require_inventory_adjustment_reason_on_post'
+         AND NOT tgisinternal) THEN
     RAISE EXCEPTION 'ADJUSTMENT_REASON_SERVER_VALIDATION_MISSING';
   END IF;
 END $contract$;

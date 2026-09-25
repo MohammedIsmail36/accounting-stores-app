@@ -23,6 +23,7 @@ const databaseMessages: Record<string, string> = {
   INVENTORY_VARIANCE_PRECONDITION_CHANGED: "تغيرت كمية المنتج أو حركاته منذ حفظ المسودة؛ أعد مراجعة البنود قبل الترحيل.",
   INVENTORY_VARIANCE_PERIOD_LOCKED: "الفترة المحاسبية مقفلة؛ لا يمكن تنفيذ العملية بهذا التاريخ.",
   INVENTORY_VARIANCE_REASON_REQUIRED: "اكتب سبب الفرق في ملاحظات كل بند غير مطابق.",
+  INVENTORY_VARIANCE_REASON_CODE_REQUIRED: "حدّد سببًا من القائمة لكل بند ذي فرق، واحفظ المسودة قبل الترحيل.",
   INVENTORY_VARIANCE_ITEMS_INVALID: "بنود التسوية غير مكتملة أو تحتوي منتجًا مكررًا.",
   INVENTORY_VARIANCE_PRODUCT_UNAVAILABLE: "أحد المنتجات غير متاح؛ أعد مراجعة التسوية.",
   INVENTORY_VARIANCE_NEGATIVE_STOCK: "ستؤدي العملية إلى كمية مخزون سالبة.",

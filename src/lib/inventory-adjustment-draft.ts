@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import type { InventoryAdjustmentReasonCode } from "@/lib/inventory-adjustment-reasons";
 
 export type InventoryAdjustmentDraftItem = {
   product_id: string;
@@ -6,6 +7,8 @@ export type InventoryAdjustmentDraftItem = {
   actual_quantity: number;
   unit_cost: number;
   notes: string;
+  reason_code: InventoryAdjustmentReasonCode | null;
+  reason_reference: string | null;
 };
 
 export type InventoryAdjustmentDraftInput = {
@@ -33,12 +36,16 @@ const messages: Record<string, string> = {
   INVENTORY_DRAFT_VERSION_CHANGED: "عُدلت المسودة في جلسة أخرى؛ حدّث الصفحة قبل الحفظ.",
   INVENTORY_DRAFT_STATUS_CHANGED: "تغيرت حالة التسوية؛ حدّث الصفحة قبل الحفظ.",
   INVENTORY_DRAFT_NOT_FOUND: "التسوية غير موجودة؛ حدّث القائمة.",
+  INVENTORY_DRAFT_REASON_INVALID: "سبب الفرق غير معروف؛ اختر سببًا من القائمة.",
+  INVENTORY_DRAFT_REASON_REQUIRED: "حدد سببًا واكتب ملاحظة لكل بند ذي فرق.",
+  INVENTORY_DRAFT_REASON_REFERENCE_INVALID: "اكتب مرجع المستند الأصلي لتصحيح خطأ سابق فقط.",
+  INVENTORY_DRAFT_REASON_ITEM_MISMATCH: "تعذر ربط سبب الفرق ببند التسوية؛ تحقق من المسودة.",
 };
 
 export async function saveInventoryAdjustmentDraft(
   input: InventoryAdjustmentDraftInput,
 ): Promise<InventoryAdjustmentDraftResult> {
-  const { data, error } = await supabase.rpc("save_inventory_adjustment_draft" as never, {
+  const { data, error } = await supabase.rpc("save_inventory_adjustment_draft_with_reasons" as never, {
     p_adjustment_id: input.id,
     p_expected_updated_at: input.expectedUpdatedAt,
     p_adjustment_date: input.date,
