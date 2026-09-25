@@ -1,10 +1,12 @@
 import React, { useState, useEffect, useRef } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { PageHeader } from "@/components/PageHeader";
 import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { postInventoryAdjustmentAtomic, reverseInventoryAdjustmentAtomic } from "@/lib/inventory-adjustment-atomic";
 import { saveInventoryAdjustmentDraft } from "@/lib/inventory-adjustment-draft";
 import { deleteInventoryAdjustmentDraft } from "@/lib/inventory-adjustment-delete";
+import { removeDeletedInventoryAdjustmentFromCache } from "@/lib/inventory-adjustment-cache";
 import { formatInventoryAdjustmentNumber } from "@/lib/inventory-adjustment-number";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSettings } from "@/contexts/SettingsContext";
@@ -68,6 +70,7 @@ interface AdjustmentItem {
 export default function InventoryAdjustmentForm() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { role } = useAuth();
   const { settings, formatCurrency } = useSettings();
   const isNew = !id;
@@ -300,6 +303,7 @@ export default function InventoryAdjustmentForm() {
     setSaving(true);
     try {
       await deleteInventoryAdjustmentDraft(id, loadedUpdatedAt);
+      removeDeletedInventoryAdjustmentFromCache(queryClient, id);
       notify.success("تم حذف التسوية بنجاح");
       setIsDirty(false); navGuard.allowNext();
       navigate("/inventory-adjustments");

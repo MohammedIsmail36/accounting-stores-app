@@ -17,6 +17,7 @@ import { INVOICE_STATUS_LABELS } from "@/lib/constants";
 import { notify } from "@/lib/notify";
 import { formatInventoryAdjustmentNumber } from "@/lib/inventory-adjustment-number";
 import { deleteInventoryAdjustmentDraft } from "@/lib/inventory-adjustment-delete";
+import { inventoryAdjustmentsQueryKey, removeDeletedInventoryAdjustmentFromCache } from "@/lib/inventory-adjustment-cache";
 
 interface AdjustmentRow {
   id: string;
@@ -45,7 +46,7 @@ export default function InventoryAdjustments() {
     isLoading,
     isError,
   } = useQuery({
-    queryKey: ["inventory-adjustments"],
+    queryKey: inventoryAdjustmentsQueryKey,
     queryFn: async () => {
       const { data, error } = await (
         supabase.from("inventory_adjustments" as any) as any
@@ -66,8 +67,8 @@ export default function InventoryAdjustments() {
   const deleteMutation = useMutation({
     mutationFn: ({ id, updatedAt }: { id: string; updatedAt: string }) =>
       deleteInventoryAdjustmentDraft(id, updatedAt),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["inventory-adjustments"] });
+    onSuccess: (_data, { id }) => {
+      removeDeletedInventoryAdjustmentFromCache(queryClient, id);
       notify.success("تم حذف التسوية بنجاح");
     },
     onError: (error: Error) => notify.error("لم تُحذف المسودة", error.message),

@@ -5,7 +5,8 @@ import { chmodSync, mkdtempSync, readFileSync, readdirSync, symlinkSync, unlinkS
 import { join } from 'node:path';
 
 const repo='/opt/accounting-app';
-const commit='8032cb302bf3021be24ae8dca0c6b4ddfbd245c6';
+const commit=process.argv[2];
+if(!/^[0-9a-f]{40}$/.test(commit??'')) throw new Error('حدد بصمة الالتزام المراد بناؤه');
 const ref='dunzfxurefzlaamgghys';
 const api=`https://${ref}.supabase.co`;
 const live='/var/www/staging.alibea2020.com';

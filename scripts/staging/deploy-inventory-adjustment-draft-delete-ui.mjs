@@ -34,7 +34,7 @@ const guard=JSON.parse(readFileSync(join(backup,'DEPLOY_GUARD.json'),'utf8'));
 const build=JSON.parse(readFileSync(join(source,'build-manifest.json'),'utf8'));
 if(guard.result!=='STAGING_DRAFT_DELETE_UI_BACKUP_OK'
   || build.result!=='STAGING_DRAFT_DELETE_UI_BUILD_READY'
-  || build.commit!=='8032cb302bf3021be24ae8dca0c6b4ddfbd245c6'
+  || build.commit!==run('git',['rev-parse','HEAD']).trim()
   || build.source!==source || guard.source!==source || guard.build!==build.build
   || readFileSync(join(root,'supabase/.temp/project-ref'),'utf8').trim()!==ref) {
   throw new Error('هوية البناء أو النسخة أو Staging غير متوقعة');
