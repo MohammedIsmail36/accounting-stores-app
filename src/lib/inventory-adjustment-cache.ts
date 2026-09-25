@@ -2,6 +2,10 @@ import type { QueryClient } from "@tanstack/react-query";
 
 export const inventoryAdjustmentsQueryKey = ["inventory-adjustments"] as const;
 
+export function clearInventoryAdjustmentsCacheAfterSave(queryClient: QueryClient): void {
+  queryClient.removeQueries({ queryKey: inventoryAdjustmentsQueryKey, exact: true });
+}
+
 export function removeDeletedInventoryAdjustmentFromCache(
   queryClient: QueryClient,
   adjustmentId: string,
