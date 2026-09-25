@@ -4,6 +4,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { postInventoryAdjustmentAtomic, reverseInventoryAdjustmentAtomic } from "@/lib/inventory-adjustment-atomic";
 import { saveInventoryAdjustmentDraft } from "@/lib/inventory-adjustment-draft";
+import { deleteInventoryAdjustmentDraft } from "@/lib/inventory-adjustment-delete";
 import { formatInventoryAdjustmentNumber } from "@/lib/inventory-adjustment-number";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSettings } from "@/contexts/SettingsContext";
@@ -295,20 +296,15 @@ export default function InventoryAdjustmentForm() {
   }
 
   async function handleDeleteDraft() {
-    if (!id || saving) return;
+    if (!id || !loadedUpdatedAt || saving) return;
     setSaving(true);
     try {
-      await (supabase.from("inventory_adjustment_items") as any)
-        .delete()
-        .eq("adjustment_id", id);
-      await (supabase.from("inventory_adjustments") as any)
-        .delete()
-        .eq("id", id);
+      await deleteInventoryAdjustmentDraft(id, loadedUpdatedAt);
       notify.success("تم حذف التسوية بنجاح");
       setIsDirty(false); navGuard.allowNext();
       navigate("/inventory-adjustments");
-    } catch {
-      notify.error("خطأ في الحذف");
+    } catch (error: any) {
+      notify.error("لم تُحذف المسودة", error?.message || "حدّث الصفحة وتحقق من حالة التسوية");
     } finally {
       setSaving(false);
     }
@@ -480,7 +476,7 @@ export default function InventoryAdjustmentForm() {
               }}
             />
           )}
-          {!isNew && isDraft && canEdit && (
+          {!isNew && isDraft && role === "admin" && (
             <ConfirmDialog
               trigger={
                 <Button

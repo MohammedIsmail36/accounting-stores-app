@@ -16,6 +16,7 @@ import { ExportMenu } from "@/components/ExportMenu";
 import { INVOICE_STATUS_LABELS } from "@/lib/constants";
 import { notify } from "@/lib/notify";
 import { formatInventoryAdjustmentNumber } from "@/lib/inventory-adjustment-number";
+import { deleteInventoryAdjustmentDraft } from "@/lib/inventory-adjustment-delete";
 
 interface AdjustmentRow {
   id: string;
@@ -25,6 +26,7 @@ interface AdjustmentRow {
   description: string | null;
   status: string;
   created_at: string;
+  updated_at: string;
 }
 
 const statusLabels: Record<string, string> = {
@@ -62,25 +64,13 @@ export default function InventoryAdjustments() {
   }, [isError]);
 
   const deleteMutation = useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await (
-        supabase.from("inventory_adjustment_items" as any) as any
-      )
-        .delete()
-        .eq("adjustment_id", id);
-      if (error) throw error;
-      const { error: err2 } = await (
-        supabase.from("inventory_adjustments" as any) as any
-      )
-        .delete()
-        .eq("id", id);
-      if (err2) throw err2;
-    },
+    mutationFn: ({ id, updatedAt }: { id: string; updatedAt: string }) =>
+      deleteInventoryAdjustmentDraft(id, updatedAt),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["inventory-adjustments"] });
       notify.success("تم حذف التسوية بنجاح");
     },
-    onError: () => notify.error("خطأ في الحذف"),
+    onError: (error: Error) => notify.error("لم تُحذف المسودة", error.message),
   });
 
   const approvedCount = adjustments.filter(
@@ -153,7 +143,7 @@ export default function InventoryAdjustments() {
               description="هل أنت متأكد من حذف هذه التسوية؟ لا يمكن التراجع عن هذا الإجراء."
               confirmText="حذف"
               destructive
-              onConfirm={() => deleteMutation.mutate(row.original.id)}
+              onConfirm={() => deleteMutation.mutate({ id: row.original.id, updatedAt: row.original.updated_at })}
             />
 
           )}
