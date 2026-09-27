@@ -29,6 +29,7 @@ import { Input } from "@/components/ui/input";
 import { NumberInput } from "@/components/NumberInput";
 import { DatePickerInput } from "@/components/DatePickerInput";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { LookupCombobox } from "@/components/LookupCombobox";
 import {
@@ -51,7 +52,6 @@ import {
   Trash2,
   ClipboardCheck,
   ListChecks,
-  StickyNote,
   CreditCard,
   Ban,
   Loader2,
@@ -721,18 +721,19 @@ export default function InventoryAdjustmentForm() {
         {/* Table */}
         <div className="overflow-x-auto">
           <table
-            className="w-full min-w-[1080px] text-right border-collapse"
+            className="w-full min-w-[1280px] text-right border-collapse"
             style={{ tableLayout: "fixed" }}
           >
             <colgroup>
               <col style={{ width: "4%" }} />
-              <col style={{ width: "30%" }} />
-              <col style={{ width: "10%" }} />
-              <col style={{ width: "10%" }} />
+              <col style={{ width: "26%" }} />
+              <col style={{ width: "9%" }} />
+              <col style={{ width: "9%" }} />
               <col style={{ width: "8%" }} />
+              <col style={{ width: "9%" }} />
+              <col style={{ width: "9%" }} />
               <col style={{ width: "11%" }} />
-              <col style={{ width: "11%" }} />
-              <col style={{ width: "13%" }} />
+              <col style={{ width: "12%" }} />
               {isEditable && <col style={{ width: "3%" }} />}
             </colgroup>
             <thead>
@@ -759,7 +760,10 @@ export default function InventoryAdjustmentForm() {
                   إجمالي الفرق
                 </th>
                 <th className="py-2 px-3 font-medium text-muted-foreground text-xs text-center">
-                  السبب والملاحظات
+                  سبب الفرق
+                </th>
+                <th className="py-2 px-3 font-medium text-muted-foreground text-xs">
+                  ملاحظات البند
                 </th>
                 {isEditable && <th className="py-2 px-2" />}
               </tr>
@@ -767,7 +771,7 @@ export default function InventoryAdjustmentForm() {
             <tbody>
               {items.length === 0 ? (
                 <tr>
-                  <td colSpan={isEditable ? 9 : 8}>
+                  <td colSpan={isEditable ? 10 : 9}>
                     <div className="flex flex-col items-center justify-center py-16 gap-3">
                       <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center">
                         <ListChecks className="h-5 w-5 text-muted-foreground/40" />
@@ -893,23 +897,25 @@ export default function InventoryAdjustmentForm() {
                     <td className="py-2 px-3">
                       {isEditable ? (
                         <div className="space-y-1">
-                          <select
+                          <Select
                             value={item.reason_code}
-                            onChange={(e) => {
+                            onValueChange={(value) => {
                               const u = [...items];
-                              u[i].reason_code = e.target.value as InventoryAdjustmentReasonCode | "";
-                              if (u[i].reason_code !== "prior_entry_error") u[i].reason_reference = "";
+                              u[i].reason_code = value as InventoryAdjustmentReasonCode;
+                              if (value !== "prior_entry_error") u[i].reason_reference = "";
                               setItems(u);
                             }}
                             disabled={item.difference === 0}
-                            aria-label="سبب فرق المخزون"
-                            className="h-8 w-full rounded-md border border-border bg-background px-2 text-xs"
                           >
-                            <option value="">اختر السبب</option>
-                            {INVENTORY_ADJUSTMENT_REASONS.map((reason) => (
-                              <option key={reason.code} value={reason.code}>{reason.label}</option>
-                            ))}
-                          </select>
+                            <SelectTrigger className="h-8 w-full text-xs" aria-label="سبب فرق المخزون">
+                              <SelectValue placeholder="اختر السبب" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {INVENTORY_ADJUSTMENT_REASONS.map((reason) => (
+                                <SelectItem key={reason.code} value={reason.code}>{reason.label}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
                           {item.reason_code === "prior_entry_error" && (
                             <Input
                               value={item.reason_reference}
@@ -923,17 +929,6 @@ export default function InventoryAdjustmentForm() {
                               aria-label="مرجع سبب الفرق"
                             />
                           )}
-                          <Input
-                            value={item.notes}
-                            onChange={(e) => {
-                              const u = [...items];
-                              u[i].notes = e.target.value;
-                              setItems(u);
-                            }}
-                            onKeyDown={(e) => handleLastFieldKeyDown(e, i, "notes")}
-                            className="text-xs bg-muted/30 border-border rounded-md h-8 w-full"
-                            placeholder={item.difference === 0 ? "ملاحظة اختيارية" : "شرح الفرق (مطلوب)"}
-                          />
                         </div>
                       ) : (
                         <div className="space-y-0.5 text-xs text-muted-foreground">
@@ -941,9 +936,29 @@ export default function InventoryAdjustmentForm() {
                             {inventoryAdjustmentReasonLabel(item.reason_code)
                               ?? (item.difference !== 0 ? "سبب قديم غير مصنف" : "—")}
                           </span>
-                          {item.reason_reference && <span className="block truncate">{item.reason_reference}</span>}
-                          {item.notes && <span className="block truncate">{item.notes}</span>}
+                          {item.reason_reference && <span className="block truncate" title={item.reason_reference}>{item.reason_reference}</span>}
                         </div>
+                      )}
+                    </td>
+
+                    <td className="py-2 px-3">
+                      {isEditable ? (
+                        <Input
+                          value={item.notes}
+                          onChange={(e) => {
+                            const u = [...items];
+                            u[i].notes = e.target.value;
+                            setItems(u);
+                          }}
+                          onKeyDown={(e) => handleLastFieldKeyDown(e, i, "notes")}
+                          className="text-xs bg-muted/30 border-border rounded-md h-8 w-full"
+                          placeholder={item.difference === 0 ? "ملاحظة اختيارية" : "شرح الفرق (مطلوب)"}
+                          aria-label="ملاحظات البند"
+                        />
+                      ) : (
+                        <span className="block truncate text-xs text-muted-foreground" title={item.notes || undefined}>
+                          {item.notes || "—"}
+                        </span>
                       )}
                     </td>
 
@@ -1029,32 +1044,8 @@ export default function InventoryAdjustmentForm() {
         </div>
       </div>
 
-      {/* ── Notes + Summary: Side by side ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Notes */}
-        <div className="bg-card p-6 rounded-2xl border shadow-sm flex flex-col">
-          <div className="mb-4">
-            <SectionHeader icon={StickyNote} title="ملاحظات" />
-          </div>
-          <div className="flex-1 space-y-2">
-            <Label className="text-sm font-medium text-muted-foreground">
-              ملاحظات حول عملية الجرد
-            </Label>
-            {isEditable ? (
-              <textarea
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                className="w-full h-32 px-4 py-3 bg-muted/30 border border-border rounded-xl text-sm transition-all resize-none focus:ring-2 focus:ring-ring focus:border-ring"
-                placeholder="أدخل أي ملاحظات إضافية هنا..."
-              />
-            ) : (
-              <div className="h-32 px-4 py-3 bg-muted/30 border rounded-xl text-sm text-muted-foreground">
-                {description || "لا توجد ملاحظات"}
-              </div>
-            )}
-          </div>
-        </div>
-
+      {/* ملخص واحد؛ لا نكرر وصف المستند في حقل ملاحظات آخر */}
+      <div className="grid grid-cols-1 gap-6">
         {/* Summary */}
         <div className="bg-card p-6 rounded-2xl border shadow-sm flex flex-col justify-between">
           <div className="mb-4">
