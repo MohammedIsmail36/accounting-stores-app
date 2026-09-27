@@ -31,6 +31,8 @@ describe("ربط شاشة التسوية بالمحرك الذري", () => {
     expect(source).toContain("buildInventoryAdjustmentPreview(items)");
     expect(source).toContain("معاينة أثر الكمية والقيمة التقديرية");
     expect(source).toContain("يعيد الخادم احتساب تكلفة الحركات");
+    expect(source).toContain("الكمية: من");
+    expect(source).toContain('<span aria-hidden="true">•</span>');
     expect(source).toContain('isDraft ? "القيمة التقديرية للفرق" : "قيمة الفرق المسجلة"');
   });
 });

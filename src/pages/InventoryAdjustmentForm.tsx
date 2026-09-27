@@ -617,7 +617,7 @@ export default function InventoryAdjustmentForm() {
                       <div key={line.productId} className="space-y-1 px-3 py-2">
                         <p className="truncate font-medium" title={line.productName}>{line.productName}</p>
                         <p className="font-mono text-xs tabular-nums text-muted-foreground">
-                          الكمية: {line.beforeQuantity.toLocaleString("en-US")} ← {line.afterQuantity.toLocaleString("en-US")}
+                          الكمية: من {line.beforeQuantity.toLocaleString("en-US")} إلى {line.afterQuantity.toLocaleString("en-US")}
                           {" · "}الفرق: {line.difference > 0 ? "+" : ""}{line.difference.toLocaleString("en-US")}
                         </p>
                         {line.kind === "matched" ? (
@@ -633,6 +633,7 @@ export default function InventoryAdjustmentForm() {
                   </div>
                   <div className="flex flex-wrap gap-x-4 gap-y-1 border-t bg-muted/20 px-3 py-2 text-xs">
                     <span>فائض تقديري: {formatCurrency(estimatedSurplus)}</span>
+                    <span aria-hidden="true">•</span>
                     <span>عجز تقديري: {formatCurrency(estimatedShortage)}</span>
                   </div>
                 </div>
