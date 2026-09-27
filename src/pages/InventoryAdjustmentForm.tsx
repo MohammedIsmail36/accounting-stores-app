@@ -621,22 +621,30 @@ export default function InventoryAdjustmentForm() {
               }
               title="ترحيل التسوية"
               description="ستُراجع كميات المنتجات والتكلفة والفترة داخل قاعدة البيانات، ثم تُحفظ الحركات والقيد والحالة معًا أو لا يُحفظ شيء. يمكن للمدير عكسها لاحقًا بحركة وقيد عكسيين."
+              contentClassName="max-h-[90dvh] grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden"
               confirmText="ترحيل الآن"
               loading={saving}
               confirmDisabled={isDirty || missingReasonCount > 0}
               onConfirm={handleApprove}
             >
-              <div className="space-y-3 text-sm">
+              <div className="min-h-0 space-y-3 overflow-y-auto overscroll-contain text-sm" role="region" aria-label="تفاصيل بنود التسوية" tabIndex={0}>
                 {isDirty && <p className="text-destructive">احفظ تعديلات المسودة قبل الترحيل.</p>}
                 {missingReasonCount > 0 && (
                   <p className="text-destructive">حدد السبب واكتب الشرح في {missingReasonCount} من البنود ثم احفظ المسودة.</p>
                 )}
+                <div className="sticky top-0 z-10 flex flex-wrap gap-x-3 gap-y-1 rounded-lg border border-border bg-background px-3 py-2 text-xs shadow-sm">
+                  <span>عدد البنود: {postingPreview.length}</span>
+                  {postingPreview.length > 4 && <span className="text-muted-foreground">مرّر لمراجعة جميع البنود</span>}
+                  <span>فائض تقديري: {formatCurrency(estimatedSurplus)}</span>
+                  <span aria-hidden="true">•</span>
+                  <span>عجز تقديري: {formatCurrency(estimatedShortage)}</span>
+                </div>
                 <div className="rounded-lg border border-border">
                   <p className="border-b bg-muted/30 px-3 py-2 font-semibold">معاينة أثر الكمية والقيمة التقديرية</p>
-                  <div className="max-h-52 divide-y overflow-y-auto">
+                  <div className="divide-y">
                     {postingPreview.map((line) => (
                       <div key={line.productId} className="space-y-1 px-3 py-2">
-                        <p className="truncate font-medium" title={line.productName}>{line.productName}</p>
+                        <p className="break-words font-medium">{line.productName}</p>
                         <p className="font-mono text-xs tabular-nums text-muted-foreground">
                           الكمية: من {line.beforeQuantity.toLocaleString("en-US")} إلى {line.afterQuantity.toLocaleString("en-US")}
                           {" · "}الفرق: {line.difference > 0 ? "+" : ""}{line.difference.toLocaleString("en-US")}
@@ -651,11 +659,6 @@ export default function InventoryAdjustmentForm() {
                         )}
                       </div>
                     ))}
-                  </div>
-                  <div className="flex flex-wrap gap-x-4 gap-y-1 border-t bg-muted/20 px-3 py-2 text-xs">
-                    <span>فائض تقديري: {formatCurrency(estimatedSurplus)}</span>
-                    <span aria-hidden="true">•</span>
-                    <span>عجز تقديري: {formatCurrency(estimatedShortage)}</span>
                   </div>
                 </div>
                 <p className="text-muted-foreground">

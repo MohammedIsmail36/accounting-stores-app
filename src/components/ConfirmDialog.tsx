@@ -23,6 +23,8 @@ export interface ConfirmDialogProps {
   description?: React.ReactNode;
   /** محتوى إضافي داخل جسم الحوار (سبب الإلغاء، تحذير محاسبي، تفاصيل...) */
   children?: React.ReactNode;
+  /** أصناف إضافية لنافذة محددة دون تغيير حوارات التأكيد الأخرى. */
+  contentClassName?: string;
   confirmText?: string;
   cancelText?: string;
   /** زر تأكيد بنمط الحذف/الإلغاء */
@@ -45,6 +47,7 @@ export function ConfirmDialog({
   title,
   description,
   children,
+  contentClassName,
   confirmText = "تأكيد",
   cancelText = "إلغاء",
   destructive = false,
@@ -61,7 +64,7 @@ export function ConfirmDialog({
         : {})}
     >
       {trigger && <AlertDialogTrigger asChild>{trigger}</AlertDialogTrigger>}
-      <AlertDialogContent dir="rtl">
+      <AlertDialogContent dir="rtl" className={contentClassName}>
 
         <AlertDialogHeader>
           <AlertDialogTitle>{title}</AlertDialogTitle>
