@@ -52,6 +52,33 @@ export function upsertSavedInventoryAdjustmentInCache(
   });
 }
 
+export function updatePostedInventoryAdjustmentInCache(
+  queryClient: QueryClient,
+  updated: {
+    id: string;
+    status: "posted" | "cancelled";
+    postedNumber: number;
+    updatedAt: string;
+  },
+): void {
+  queryClient.setQueryData<InventoryAdjustmentListRow[]>(
+    inventoryAdjustmentsQueryKey,
+    (rows) => rows?.map((row) => row.id === updated.id
+      ? {
+          ...row,
+          status: updated.status,
+          posted_number: updated.postedNumber,
+          updated_at: updated.updatedAt,
+        }
+      : row),
+  );
+  // Keep the visible row current immediately and reconcile with the server.
+  void queryClient.invalidateQueries({
+    queryKey: inventoryAdjustmentsQueryKey,
+    refetchType: "all",
+  });
+}
+
 export function removeDeletedInventoryAdjustmentFromCache(
   queryClient: QueryClient,
   adjustmentId: string,

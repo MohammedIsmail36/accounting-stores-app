@@ -6,7 +6,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { postInventoryAdjustmentAtomic, reverseInventoryAdjustmentAtomic } from "@/lib/inventory-adjustment-atomic";
 import { saveInventoryAdjustmentDraft } from "@/lib/inventory-adjustment-draft";
 import { deleteInventoryAdjustmentDraft } from "@/lib/inventory-adjustment-delete";
-import { upsertSavedInventoryAdjustmentInCache, removeDeletedInventoryAdjustmentFromCache } from "@/lib/inventory-adjustment-cache";
+import { inventoryAdjustmentsQueryKey, upsertSavedInventoryAdjustmentInCache, removeDeletedInventoryAdjustmentFromCache, updatePostedInventoryAdjustmentInCache } from "@/lib/inventory-adjustment-cache";
 import { formatInventoryAdjustmentNumber } from "@/lib/inventory-adjustment-number";
 import {
   INVENTORY_ADJUSTMENT_REASONS,
@@ -170,6 +170,7 @@ export default function InventoryAdjustmentForm() {
         }
       }
       setLoading(false);
+      return adj;
     } else {
       setLoading(false);
     }
@@ -383,7 +384,17 @@ export default function InventoryAdjustmentForm() {
       setEditMode(false);
       setApproveOpen(false);
       postRequestId.current = null;
-      await loadData();
+      const persisted = await loadData();
+      if (persisted?.status === "posted" && Number(persisted.posted_number) > 0) {
+        updatePostedInventoryAdjustmentInCache(queryClient, {
+          id,
+          status: "posted",
+          postedNumber: Number(persisted.posted_number),
+          updatedAt: persisted.updated_at,
+        });
+      } else {
+        void queryClient.invalidateQueries({ queryKey: inventoryAdjustmentsQueryKey, refetchType: "all" });
+      }
       notify.success(result.repeated
         ? "هذه التسوية مرحّلة بالفعل؛ لم تُنشأ حركة أو قيود مكررة"
         : "رُحّلت التسوية والحركات والقيد في عملية واحدة");
@@ -410,7 +421,17 @@ export default function InventoryAdjustmentForm() {
       setReverseOpen(false);
       setReverseReason("");
       reverseRequestId.current = null;
-      await loadData();
+      const persisted = await loadData();
+      if (persisted?.status === "cancelled" && Number(persisted.posted_number) > 0) {
+        updatePostedInventoryAdjustmentInCache(queryClient, {
+          id,
+          status: "cancelled",
+          postedNumber: Number(persisted.posted_number),
+          updatedAt: persisted.updated_at,
+        });
+      } else {
+        void queryClient.invalidateQueries({ queryKey: inventoryAdjustmentsQueryKey, refetchType: "all" });
+      }
       notify.success(result.repeated
         ? "هذه التسوية ملغاة بالفعل؛ لم يُنشأ أثر مكرر"
         : "أُلغيت التسوية بحركة وقيد عكسيين دون حذف الأصل");

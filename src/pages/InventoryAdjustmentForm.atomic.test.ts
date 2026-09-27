@@ -27,6 +27,13 @@ describe("ربط شاشة التسوية بالمحرك الذري", () => {
     expect(source).toContain("reverseRequestId.current ?? crypto.randomUUID()");
   });
 
+  it("يحدث القائمة والتصدير بعد ترحيل التسوية أو عكسها", () => {
+    expect(source.match(/updatePostedInventoryAdjustmentInCache\(queryClient/g)).toHaveLength(2);
+    expect(source).toContain('status: "posted",');
+    expect(source).toContain('status: "cancelled",');
+    expect(source).toContain('refetchType: "all"');
+  });
+
   it("يعرض معاينة تقديرية مع تنبيه التكلفة الخادمية قبل الترحيل", () => {
     expect(source).toContain("buildInventoryAdjustmentPreview(items)");
     expect(source).toContain("معاينة أثر الكمية والقيمة التقديرية");
