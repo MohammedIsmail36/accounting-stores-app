@@ -43,6 +43,8 @@ import {
   calculateLegacyAdjustmentLine,
   summarizeLegacyAdjustment,
 } from "@/lib/inventory-adjustment-legacy";
+import { buildInventoryAdjustmentPreview } from "@/lib/inventory-adjustment-preview";
+import { DOCUMENT_STATUS_LABELS } from "@/lib/constants";
 import {
   Plus,
   X,
@@ -430,6 +432,14 @@ export default function InventoryAdjustmentForm() {
       || (item.reason_code === "prior_entry_error" && !item.reason_reference.trim())
     ),
   ).length;
+  const postingPreview = buildInventoryAdjustmentPreview(items);
+  const estimatedSurplus = postingPreview
+    .filter((line) => line.kind === "surplus")
+    .reduce((sum, line) => sum + line.estimatedValue, 0);
+  const estimatedShortage = postingPreview
+    .filter((line) => line.kind === "shortage")
+    .reduce((sum, line) => sum + line.estimatedValue, 0);
+
   function removeZeroDiffItems() {
     setItems((prev) => prev.filter((i) => !i.product_id || i.difference !== 0));
   }
@@ -440,12 +450,7 @@ export default function InventoryAdjustmentForm() {
     ? null
     : formatInventoryAdjustmentNumber(status, adjustmentNumber, postedNumber);
   const isEditable = editMode && isDraft && canEdit;
-  const statusLabels: Record<string, string> = {
-    draft: "مسودة",
-    approved: "معتمد (قديم)",
-    posted: "مرحّل",
-    cancelled: "ملغي",
-  };
+  const statusLabels = DOCUMENT_STATUS_LABELS.adjustment;
   const statusVariants: Record<
     string,
     "secondary" | "default" | "destructive"
@@ -492,7 +497,7 @@ export default function InventoryAdjustmentForm() {
                   "الكمية الفعلية",
                   "الفرق",
                   "متوسط التكلفة",
-                  "إجمالي الفرق",
+                  isDraft ? "القيمة التقديرية للفرق" : "قيمة الفرق المسجلة",
                   "سبب الفرق",
                   "مرجع السبب",
                   "ملاحظات",
@@ -514,8 +519,8 @@ export default function InventoryAdjustmentForm() {
                   { label: "التاريخ", value: adjustmentDate },
                   { label: "الحالة", value: statusLabels[status] || status },
                   { label: "عدد البنود", value: String(items.length) },
-                  { label: "إجمالي العجز", value: formatCurrency(totalLoss) },
-                  { label: "إجمالي الفائض", value: formatCurrency(totalGain) },
+                  { label: isDraft ? "إجمالي العجز التقديري" : "إجمالي العجز", value: formatCurrency(totalLoss) },
+                  { label: isDraft ? "إجمالي الفائض التقديري" : "إجمالي الفائض", value: formatCurrency(totalGain) },
                   {
                     label: "الصافي",
                     value:
@@ -600,12 +605,41 @@ export default function InventoryAdjustmentForm() {
               confirmDisabled={isDirty || missingReasonCount > 0}
               onConfirm={handleApprove}
             >
-              <div className="space-y-2 text-sm">
+              <div className="space-y-3 text-sm">
                 {isDirty && <p className="text-destructive">احفظ تعديلات المسودة قبل الترحيل.</p>}
                 {missingReasonCount > 0 && (
                   <p className="text-destructive">حدد السبب واكتب الشرح في {missingReasonCount} من البنود ثم احفظ المسودة.</p>
                 )}
-                <p className="text-muted-foreground">المبالغ المعروضة في المسودة تقديرية؛ يعتمد الترحيل تكلفة الحركات المحسوبة خادميًا. البنود المطابقة لا تُنشئ حركة أو قيدًا.</p>
+                <div className="rounded-lg border border-border">
+                  <p className="border-b bg-muted/30 px-3 py-2 font-semibold">معاينة أثر الكمية والقيمة التقديرية</p>
+                  <div className="max-h-52 divide-y overflow-y-auto">
+                    {postingPreview.map((line) => (
+                      <div key={line.productId} className="space-y-1 px-3 py-2">
+                        <p className="truncate font-medium" title={line.productName}>{line.productName}</p>
+                        <p className="font-mono text-xs tabular-nums text-muted-foreground">
+                          الكمية: {line.beforeQuantity.toLocaleString("en-US")} ← {line.afterQuantity.toLocaleString("en-US")}
+                          {" · "}الفرق: {line.difference > 0 ? "+" : ""}{line.difference.toLocaleString("en-US")}
+                        </p>
+                        {line.kind === "matched" ? (
+                          <p className="text-xs text-muted-foreground">مطابق؛ لا حركة ولا قيد لهذا البند.</p>
+                        ) : (
+                          <p className="text-xs text-muted-foreground">
+                            القيمة التقديرية: {formatCurrency(line.estimatedValue)}
+                            {" · "}مدين {line.debitAccount} / دائن {line.creditAccount}
+                          </p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                  <div className="flex flex-wrap gap-x-4 gap-y-1 border-t bg-muted/20 px-3 py-2 text-xs">
+                    <span>فائض تقديري: {formatCurrency(estimatedSurplus)}</span>
+                    <span>عجز تقديري: {formatCurrency(estimatedShortage)}</span>
+                  </div>
+                </div>
+                <p className="text-muted-foreground">
+                  هذه القيم تقديرية من المسودة؛ يعيد الخادم احتساب تكلفة الحركات والتحقق من الرصيد
+                  عند الترحيل، وقد تختلف القيمة النهائية. إذا تغيرت الكمية يرفض العملية كاملة.
+                </p>
               </div>
             </ConfirmDialog>
           )}
@@ -757,7 +791,7 @@ export default function InventoryAdjustmentForm() {
                   متوسط التكلفة
                 </th>
                 <th className="py-2 px-3 font-medium text-muted-foreground text-xs text-center">
-                  إجمالي الفرق
+                  {isDraft ? "قيمة الفرق التقديرية" : "قيمة الفرق المسجلة"}
                 </th>
                 <th className="py-2 px-3 font-medium text-muted-foreground text-xs text-center">
                   سبب الفرق
@@ -1058,7 +1092,7 @@ export default function InventoryAdjustmentForm() {
                   {formatCurrency(totalLoss)}
                 </span>
                 <span className="text-sm text-muted-foreground">
-                  إجمالي العجز
+                  {isDraft ? "إجمالي العجز التقديري" : "إجمالي العجز"}
                 </span>
               </div>
             )}
@@ -1068,7 +1102,7 @@ export default function InventoryAdjustmentForm() {
                   {formatCurrency(totalGain)}
                 </span>
                 <span className="text-sm text-muted-foreground">
-                  إجمالي الفائض
+                  {isDraft ? "إجمالي الفائض التقديري" : "إجمالي الفائض"}
                 </span>
               </div>
             )}
@@ -1087,9 +1121,9 @@ export default function InventoryAdjustmentForm() {
               </span>
               <span className="text-base font-bold text-foreground">
                 {netDifference > 0
-                  ? "صافي فائض"
+                  ? (isDraft ? "صافي فائض تقديري" : "صافي فائض")
                   : netDifference < 0
-                    ? "صافي عجز"
+                    ? (isDraft ? "صافي عجز تقديري" : "صافي عجز")
                     : "متوازن"}
               </span>
             </div>

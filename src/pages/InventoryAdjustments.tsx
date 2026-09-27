@@ -11,15 +11,12 @@ import { Plus, ClipboardCheck, ClipboardList } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useSettings } from "@/contexts/SettingsContext";
 import { ExportMenu } from "@/components/ExportMenu";
-import { INVOICE_STATUS_LABELS } from "@/lib/constants";
+import { DOCUMENT_STATUS_LABELS } from "@/lib/constants";
 import { notify } from "@/lib/notify";
 import { formatInventoryAdjustmentNumber } from "@/lib/inventory-adjustment-number";
 import { inventoryAdjustmentsQueryKey, type InventoryAdjustmentListRow } from "@/lib/inventory-adjustment-cache";
 
-const statusLabels: Record<string, string> = {
-  ...INVOICE_STATUS_LABELS,
-  approved: "معتمد (قديم)",
-};
+const statusLabels = DOCUMENT_STATUS_LABELS.adjustment;
 
 export default function InventoryAdjustments() {
   const navigate = useNavigate();
@@ -155,7 +152,7 @@ export default function InventoryAdjustments() {
               <ClipboardCheck className="w-5 h-5 text-green-700 dark:text-green-400" />
             </div>
             <div>
-              <p className="text-xs text-muted-foreground">مرحّلة أو معتمدة قديمًا</p>
+              <p className="text-xs text-muted-foreground">مرحّلة (بما فيها التسويات القديمة)</p>
               <p className="text-xl font-black tabular-nums text-green-700 dark:text-green-400">
                 {approvedCount}
               </p>

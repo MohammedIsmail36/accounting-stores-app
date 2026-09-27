@@ -21,7 +21,7 @@ export const DOCUMENT_STATUS_LABELS: Record<
   Record<string, string>
 > = {
   invoice: INVOICE_STATUS_LABELS,
-  adjustment: { ...INVOICE_STATUS_LABELS, approved: "معتمد" },
+  adjustment: { ...INVOICE_STATUS_LABELS, approved: "مُرحّل (قديم)" },
   journal: { draft: "مسودة", posted: "معتمد", cancelled: "ملغي" },
 };
 

@@ -20,10 +20,17 @@ describe("ربط شاشة التسوية بالمحرك الذري", () => {
 
   it("يحافظ على المستند القديم للعرض فقط ويلزم سبب الفروق والعكس", () => {
     expect(source).toContain('const isPosted = status === "posted"');
-    expect(source).toContain('approved: "معتمد (قديم)"');
+    expect(source).toContain("DOCUMENT_STATUS_LABELS.adjustment");
     expect(source).toContain("!item.notes.trim()");
     expect(source).toContain("confirmDisabled={!reverseReason.trim()}");
     expect(source).toContain("postRequestId.current ?? crypto.randomUUID()");
     expect(source).toContain("reverseRequestId.current ?? crypto.randomUUID()");
+  });
+
+  it("يعرض معاينة تقديرية مع تنبيه التكلفة الخادمية قبل الترحيل", () => {
+    expect(source).toContain("buildInventoryAdjustmentPreview(items)");
+    expect(source).toContain("معاينة أثر الكمية والقيمة التقديرية");
+    expect(source).toContain("يعيد الخادم احتساب تكلفة الحركات");
+    expect(source).toContain('isDraft ? "القيمة التقديرية للفرق" : "قيمة الفرق المسجلة"');
   });
 });
