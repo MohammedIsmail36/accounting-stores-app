@@ -342,7 +342,7 @@ export default function GrowthAnalytics() {
     queryKey: ["growth-cogs", dateFrom, dateTo],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("inventory_movements")
+        .from("inventory_movements_effective_cost")
         .select("movement_type, total_cost, movement_date")
         .in("movement_type", ["sale", "sale_return"])
         .gte("movement_date", dateFrom)
@@ -356,7 +356,7 @@ export default function GrowthAnalytics() {
     queryKey: ["growth-prev-cogs", prevFrom, prevTo],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("inventory_movements")
+        .from("inventory_movements_effective_cost")
         .select("movement_type, total_cost, movement_date")
         .in("movement_type", ["sale", "sale_return"])
         .gte("movement_date", prevFrom)

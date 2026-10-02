@@ -155,7 +155,7 @@ export default function InventoryMovements() {
       const from = pagination.pageIndex * pagination.pageSize;
       const to = from + pagination.pageSize - 1;
 
-      let query = (supabase.from("inventory_movements") as any)
+      let query = (supabase.from("inventory_movements_effective_cost") as any)
         .select(
           "*, products(code, name, model_number, product_brands(name))",
           { count: "exact" },
@@ -374,7 +374,7 @@ export default function InventoryMovements() {
     const { fetchAllPaged } = await import("@/lib/paged-fetch");
     return await fetchAllPaged<MovementRow>(
       () => {
-        let q = (supabase.from("inventory_movements") as any)
+        let q = (supabase.from("inventory_movements_effective_cost") as any)
           .select(
             "*, products(code, name, model_number, product_brands(name))",
             { count: "exact" },

@@ -187,7 +187,7 @@ export default function PurchasesReport() {
     queryKey: ["pr-movements", dateFrom, dateTo],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("inventory_movements")
+        .from("inventory_movements_effective_cost")
         .select(
           "product_id, movement_type, quantity, total_cost, movement_date",
         )

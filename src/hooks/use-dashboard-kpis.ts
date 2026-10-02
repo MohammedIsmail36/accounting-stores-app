@@ -1,13 +1,11 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { fetchAllPaged } from "@/lib/paged-fetch";
 import {
   bucketExpenseLines,
   computeCOGS,
   computeMonthlyChange,
   computeMonthNetSales,
-  relationDate,
-  sumNet,
-  sumTotal,
 } from "@/lib/dashboard-metrics";
 
 /**
@@ -43,98 +41,155 @@ export function useDashboardKpis() {
       const todayLocal = `${cy}-${String(cm + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
       const ys = `${cy}-01-01`;
       const ye = todayLocal;
-      const [sItemsR, pItemsR, eR, srItemsR, prItemsR, cogsR, opExpR, adjGainR] = await Promise.all([
-        supabase
-          .from("sales_invoice_items")
-          .select("total, net_total, invoice:sales_invoices!inner(invoice_date, status)")
-          .gte("invoice.invoice_date", ys)
-          .lte("invoice.invoice_date", ye)
-          .eq("invoice.status", "posted"),
-        supabase
-          .from("purchase_invoice_items")
-          .select("total, net_total, invoice:purchase_invoices!inner(invoice_date, status)")
-          .gte("invoice.invoice_date", ys)
-          .lte("invoice.invoice_date", ye)
-          .eq("invoice.status", "posted"),
-        supabase
-          .from("expenses")
-          .select("amount, expense_date")
-          .eq("status", "posted")
-          .gte("expense_date", ys)
-          .lte("expense_date", ye),
-        supabase
-          .from("sales_return_items")
-          .select("total, return:sales_returns!inner(return_date, status)")
-          .gte("return.return_date", ys)
-          .lte("return.return_date", ye)
-          .eq("return.status", "posted"),
-        supabase
-          .from("purchase_return_items")
-          .select("total, return:purchase_returns!inner(return_date, status)")
-          .gte("return.return_date", ys)
-          .lte("return.return_date", ye)
-          .eq("return.status", "posted"),
-        supabase
-          .from("inventory_movements")
-          .select("movement_type, total_cost, movement_date")
-          .in("movement_type", ["sale", "sale_return"])
-          .gte("movement_date", ys)
-          .lte("movement_date", ye),
+      const [
+        salesInvoices,
+        purchaseInvoices,
+        expenses,
+        salesReturns,
+        purchaseReturns,
+        cogsRows,
+        opExpenseLines,
+        adjustmentGainLines,
+      ] = await Promise.all([
+        fetchAllPaged<any>(() =>
+          supabase
+            .from("sales_invoices")
+            .select("id, invoice_date, total, tax", { count: "exact" })
+            .gte("invoice_date", ys)
+            .lte("invoice_date", ye)
+            .eq("status", "posted")
+            .order("id", { ascending: true }),
+        ),
+        fetchAllPaged<any>(() =>
+          supabase
+            .from("purchase_invoices")
+            .select("id, invoice_date, total, tax", { count: "exact" })
+            .gte("invoice_date", ys)
+            .lte("invoice_date", ye)
+            .eq("status", "posted")
+            .order("id", { ascending: true }),
+        ),
+        fetchAllPaged<any>(() =>
+          supabase
+            .from("expenses")
+            .select("id, amount, expense_date", { count: "exact" })
+            .eq("status", "posted")
+            .gte("expense_date", ys)
+            .lte("expense_date", ye)
+            .order("id", { ascending: true }),
+        ),
+        fetchAllPaged<any>(() =>
+          supabase
+            .from("sales_returns")
+            .select("id, return_date, total, tax", { count: "exact" })
+            .gte("return_date", ys)
+            .lte("return_date", ye)
+            .eq("status", "posted")
+            .order("id", { ascending: true }),
+        ),
+        fetchAllPaged<any>(() =>
+          supabase
+            .from("purchase_returns")
+            .select("id, return_date, total, tax", { count: "exact" })
+            .gte("return_date", ys)
+            .lte("return_date", ye)
+            .eq("status", "posted")
+            .order("id", { ascending: true }),
+        ),
+        fetchAllPaged<any>(() =>
+          supabase
+            .from("inventory_movements_effective_cost")
+            .select("id, movement_type, total_cost, movement_date", {
+              count: "exact",
+            })
+            .in("movement_type", ["sale", "sale_return"])
+            .gte("movement_date", ys)
+            .lte("movement_date", ye)
+            .order("id", { ascending: true }),
+        ),
         // Operating expenses from GL: all expense accounts EXCEPT COGS (5101)
         // This captures PPV (5108), JV entries, and regular expenses uniformly.
-        supabase
-          .from("journal_entry_lines")
-          .select("debit, credit, accounts!inner(code, account_type), journal_entries!inner(entry_date, status)")
-          .eq("accounts.account_type", "expense")
-          .neq("accounts.code", "5101")
-          .in("journal_entries.status", ["posted", "approved"])
-          .gte("journal_entries.entry_date", ys)
-          .lte("journal_entries.entry_date", ye),
+        fetchAllPaged<any>(() =>
+          supabase
+            .from("journal_entry_lines")
+            .select(
+              "id, debit, credit, accounts!inner(code, account_type), journal_entries!inner(entry_date, status)",
+              { count: "exact" },
+            )
+            .eq("accounts.account_type", "expense")
+            .neq("accounts.code", "5101")
+            .in("journal_entries.status", ["posted", "approved"])
+            .gte("journal_entries.entry_date", ys)
+            .lte("journal_entries.entry_date", ye)
+            .order("id", { ascending: true }),
+        ),
         // Inventory adjustment GAIN (4201, revenue) — netted against system adjustments
-        supabase
-          .from("journal_entry_lines")
-          .select("debit, credit, accounts!inner(code), journal_entries!inner(entry_date, status)")
-          .eq("accounts.code", "4201")
-          .in("journal_entries.status", ["posted", "approved"])
-          .gte("journal_entries.entry_date", ys)
-          .lte("journal_entries.entry_date", ye),
+        fetchAllPaged<any>(() =>
+          supabase
+            .from("journal_entry_lines")
+            .select(
+              "id, debit, credit, accounts!inner(code), journal_entries!inner(entry_date, status)",
+              { count: "exact" },
+            )
+            .eq("accounts.code", "4201")
+            .in("journal_entries.status", ["posted", "approved"])
+            .gte("journal_entries.entry_date", ys)
+            .lte("journal_entries.entry_date", ye)
+            .order("id", { ascending: true }),
+        ),
       ]);
 
-      const salesItems = sItemsR.data || [];
-      const purchaseItems = pItemsR.data || [];
-      const expenses = eR.data || [];
+      const documentNet = (row: any) =>
+        Number(row.total || 0) - Number(row.tax || 0);
 
-      setTotalSales(sumNet(salesItems));
-      setTotalPurchases(sumNet(purchaseItems));
+      setTotalSales(
+        salesInvoices.reduce((sum, row) => sum + documentNet(row), 0),
+      );
+      setTotalPurchases(
+        purchaseInvoices.reduce((sum, row) => sum + documentNet(row), 0),
+      );
 
-      const buckets = bucketExpenseLines(opExpR.data || [], adjGainR.data || []);
+      const buckets = bucketExpenseLines(opExpenseLines, adjustmentGainLines);
       setOperatingExpenses(buckets.operating);
       setSystemAdjustments(buckets.system);
       setTotalExpenses(buckets.total);
 
-      setTotalSalesReturns(sumTotal(srItemsR.data || []));
-      setTotalPurchaseReturns(sumTotal(prItemsR.data || []));
-      setTotalCOGS(computeCOGS(cogsR.data || []));
+      setTotalSalesReturns(
+        salesReturns.reduce((sum, row) => sum + documentNet(row), 0),
+      );
+      setTotalPurchaseReturns(
+        purchaseReturns.reduce((sum, row) => sum + documentNet(row), 0),
+      );
+      setTotalCOGS(computeCOGS(cogsRows));
 
-      const invoiceDate = (row: any) => relationDate(row, "invoice", "invoice_date");
-      const itemValue = (row: any) => Number(row.net_total || row.total || 0);
-
-      const returnDate = (row: any) => relationDate(row, "return", "return_date");
-      const returnValue = (row: any) => Number(row.total || 0);
       setCurrentMonthSales(
         computeMonthNetSales(
-          salesItems,
-          srItemsR.data || [],
+          salesInvoices,
+          salesReturns,
           cm,
           cy,
-          invoiceDate,
-          itemValue,
-          returnDate,
-          returnValue,
+          (row) => row.invoice_date,
+          documentNet,
+          (row) => row.return_date,
+          documentNet,
         ),
       );
-      setSalesChange(computeMonthlyChange(salesItems, invoiceDate, itemValue, now));
-      setPurchasesChange(computeMonthlyChange(purchaseItems, invoiceDate, itemValue, now));
+      setSalesChange(
+        computeMonthlyChange(
+          salesInvoices,
+          (row) => row.invoice_date,
+          documentNet,
+          now,
+        ),
+      );
+      setPurchasesChange(
+        computeMonthlyChange(
+          purchaseInvoices,
+          (row) => row.invoice_date,
+          documentNet,
+          now,
+        ),
+      );
       setExpensesChange(
         computeMonthlyChange(
           expenses,
@@ -149,17 +204,30 @@ export function useDashboardKpis() {
       const [cR, sR, pR] = await Promise.all([
         supabase.from("customers").select("balance"),
         supabase.from("suppliers").select("balance"),
-        supabase.from("products").select("id, quantity_on_hand, min_stock_level, purchase_price").eq("is_active", true),
+        supabase
+          .from("products")
+          .select("id, quantity_on_hand, min_stock_level, purchase_price")
+          .eq("is_active", true),
       ]);
       const products = pR.data || [];
-      setReceivables((cR.data || []).filter((c) => Number(c.balance) > 0).reduce((s, c) => s + Number(c.balance), 0));
-      setPayables((sR.data || []).filter((s) => Number(s.balance) > 0).reduce((s2, s) => s2 + Number(s.balance), 0));
+      setReceivables(
+        (cR.data || [])
+          .filter((c) => Number(c.balance) > 0)
+          .reduce((s, c) => s + Number(c.balance), 0),
+      );
+      setPayables(
+        (sR.data || [])
+          .filter((s) => Number(s.balance) > 0)
+          .reduce((s2, s) => s2 + Number(s.balance), 0),
+      );
       // Inventory Value = رصيد حساب المخزون (1104) في دفتر الأستاذ
       // مصدر واحد للحقيقة يطابق ميزان المراجعة ولا يتأثر بحجم الجداول أو حدود PostgREST.
       let invValue = 0;
       const { data: invLines } = await supabase
         .from("journal_entry_lines")
-        .select("debit, credit, accounts!inner(code), journal_entries!inner(status)")
+        .select(
+          "debit, credit, accounts!inner(code), journal_entries!inner(status)",
+        )
         .eq("accounts.code", "1104")
         .in("journal_entries.status", ["posted", "approved"]);
       (invLines || []).forEach((l: any) => {
@@ -168,8 +236,11 @@ export function useDashboardKpis() {
       setInventoryValue(invValue);
 
       setLowStockCount(
-        products.filter((p) => Number(p.quantity_on_hand) < Number(p.min_stock_level) && Number(p.min_stock_level) > 0)
-          .length,
+        products.filter(
+          (p) =>
+            Number(p.quantity_on_hand) < Number(p.min_stock_level) &&
+            Number(p.min_stock_level) > 0,
+        ).length,
       );
     };
 

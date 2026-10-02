@@ -2039,7 +2039,27 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      inventory_movements_effective_cost: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          correction_cost: number
+          id: string
+          movement_date: string
+          movement_type: Database["public"]["Enums"]["inventory_movement_type"]
+          notes: string | null
+          original_total_cost: number
+          original_unit_cost: number
+          product_id: string
+          quantity: number
+          reference_id: string | null
+          reference_type: string | null
+          total_cost: number
+          unit_cost: number
+          variance_operation_id: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       adjust_product_quantity: {

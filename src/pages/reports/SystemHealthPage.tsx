@@ -112,7 +112,7 @@ export default function SystemHealthPage() {
         ),
         fetchAll<any>((f, t) =>
           supabase
-            .from("inventory_movements")
+            .from("inventory_movements_effective_cost")
             .select(
               "id, product_id, movement_type, quantity, total_cost, movement_date, reference_id, reference_type",
             )

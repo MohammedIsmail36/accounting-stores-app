@@ -119,7 +119,7 @@ export default function CommissionCalculatorPage() {
           .gte("return_date", from)
           .lte("return_date", to),
         supabase
-          .from("inventory_movements")
+          .from("inventory_movements_effective_cost")
           .select("movement_type, total_cost")
           .in("movement_type", ["sale", "sale_return"])
           .gte("movement_date", from)

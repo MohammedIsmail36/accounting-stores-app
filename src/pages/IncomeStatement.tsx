@@ -4,6 +4,7 @@ import { formatNumber } from "@/lib/format";
 import { PageHeader } from "@/components/PageHeader";
 import { format } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
+import { fetchAllPaged } from "@/lib/paged-fetch";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useSettings } from "@/contexts/SettingsContext";
 import { Button } from "@/components/ui/button";
@@ -63,23 +64,27 @@ export default function IncomeStatement() {
 
   const fetchData = async () => {
     setLoading(true);
-    const [accountsRes, linesRes] = await Promise.all([
+    const [accountsRes, lines] = await Promise.all([
       supabase
         .from("accounts")
         .select("id, code, name, account_type")
         .eq("is_active", true)
         .eq("is_parent", false)
         .order("code"),
-      supabase
-        .from("journal_entry_lines")
-        .select(
-          "account_id, debit, credit, journal_entries!inner(entry_date, status, description)",
-        )
-        .in("journal_entries.status", ["posted", "approved"]),
+      fetchAllPaged<any>(() =>
+        supabase
+          .from("journal_entry_lines")
+          .select(
+            "id, account_id, debit, credit, journal_entries!inner(entry_date, status, description)",
+            { count: "exact" },
+          )
+          .in("journal_entries.status", ["posted", "approved"])
+          .order("id", { ascending: true }),
+      ),
     ]);
     if (accountsRes.data) setAccounts(accountsRes.data as Account[]);
-    if (linesRes.data) setLines(linesRes.data);
-    if (accountsRes.error || linesRes.error) {
+    setLines(lines);
+    if (accountsRes.error) {
       notify.error("خطأ", "فشل في جلب البيانات");
     }
 
@@ -251,98 +256,100 @@ export default function IncomeStatement() {
         icon={FileBarChart}
         title="قائمة الدخل"
         description="بيان الإيرادات والمصروفات للفترة المحددة"
-        actions={<>
-          {/* Date filter */}
-          <div className="flex items-center gap-2 bg-card p-1.5 rounded-xl border shadow-sm">
-            <Popover>
-              <PopoverTrigger asChild>
+        actions={
+          <>
+            {/* Date filter */}
+            <div className="flex items-center gap-2 bg-card p-1.5 rounded-xl border shadow-sm">
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    className={cn(
+                      "gap-2 text-sm",
+                      !dateFrom && "text-muted-foreground",
+                    )}
+                  >
+                    <CalendarIcon className="h-4 w-4" />
+                    {dateFrom ? format(dateFrom, "yyyy-MM-dd") : "من تاريخ"}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar
+                    mode="single"
+                    selected={dateFrom}
+                    onSelect={setDateFrom}
+                    initialFocus
+                    className="p-3 pointer-events-auto"
+                  />
+                </PopoverContent>
+              </Popover>
+              <span className="text-xs text-muted-foreground">إلى</span>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    className={cn(
+                      "gap-2 text-sm",
+                      !dateTo && "text-muted-foreground",
+                    )}
+                  >
+                    <CalendarIcon className="h-4 w-4" />
+                    {dateTo ? format(dateTo, "yyyy-MM-dd") : "إلى تاريخ"}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar
+                    mode="single"
+                    selected={dateTo}
+                    onSelect={setDateTo}
+                    initialFocus
+                    className="p-3 pointer-events-auto"
+                  />
+                </PopoverContent>
+              </Popover>
+              {(dateFrom || dateTo) && (
                 <Button
                   variant="ghost"
-                  className={cn(
-                    "gap-2 text-sm",
-                    !dateFrom && "text-muted-foreground",
-                  )}
+                  size="icon"
+                  className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                  onClick={() => {
+                    setDateFrom(undefined);
+                    setDateTo(undefined);
+                  }}
+                  aria-label="مسح التاريخ"
                 >
-                  <CalendarIcon className="h-4 w-4" />
-                  {dateFrom ? format(dateFrom, "yyyy-MM-dd") : "من تاريخ"}
+                  <X className="h-3.5 w-3.5" />
                 </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-auto p-0" align="start">
-                <Calendar
-                  mode="single"
-                  selected={dateFrom}
-                  onSelect={setDateFrom}
-                  initialFocus
-                  className="p-3 pointer-events-auto"
-                />
-              </PopoverContent>
-            </Popover>
-            <span className="text-xs text-muted-foreground">إلى</span>
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button
-                  variant="ghost"
-                  className={cn(
-                    "gap-2 text-sm",
-                    !dateTo && "text-muted-foreground",
-                  )}
-                >
-                  <CalendarIcon className="h-4 w-4" />
-                  {dateTo ? format(dateTo, "yyyy-MM-dd") : "إلى تاريخ"}
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-auto p-0" align="start">
-                <Calendar
-                  mode="single"
-                  selected={dateTo}
-                  onSelect={setDateTo}
-                  initialFocus
-                  className="p-3 pointer-events-auto"
-                />
-              </PopoverContent>
-            </Popover>
-            {(dateFrom || dateTo) && (
+              )}
+            </div>
+            {/* Export */}
+            <div className="relative">
               <Button
-                variant="ghost"
-                size="icon"
-                className="h-7 w-7 text-muted-foreground hover:text-destructive"
-                onClick={() => {
-                  setDateFrom(undefined);
-                  setDateTo(undefined);
-                }}
-                aria-label="مسح التاريخ"
+                className="gap-2 bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg"
+                onClick={() => setExportMenuOpen(!exportMenuOpen)}
               >
-                <X className="h-3.5 w-3.5" />
+                <Download className="h-4 w-4" />
+                تصدير
               </Button>
-            )}
-          </div>
-          {/* Export */}
-          <div className="relative">
-            <Button
-              className="gap-2 bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg"
-              onClick={() => setExportMenuOpen(!exportMenuOpen)}
-            >
-              <Download className="h-4 w-4" />
-              تصدير
-            </Button>
-            {exportMenuOpen && (
-              <div className="absolute left-0 top-full mt-1 z-50 bg-popover border rounded-xl shadow-lg p-1 min-w-[140px]">
-                <button
-                  onClick={handleExportPDF}
-                  className="w-full text-right px-3 py-2 text-sm rounded-lg hover:bg-muted transition-colors"
-                >
-                  PDF تصدير
-                </button>
-                <button
-                  onClick={handleExportExcel}
-                  className="w-full text-right px-3 py-2 text-sm rounded-lg hover:bg-muted transition-colors"
-                >
-                  Excel تصدير
-                </button>
-              </div>
-            )}
-          </div>
-        </>}
+              {exportMenuOpen && (
+                <div className="absolute left-0 top-full mt-1 z-50 bg-popover border rounded-xl shadow-lg p-1 min-w-[140px]">
+                  <button
+                    onClick={handleExportPDF}
+                    className="w-full text-right px-3 py-2 text-sm rounded-lg hover:bg-muted transition-colors"
+                  >
+                    PDF تصدير
+                  </button>
+                  <button
+                    onClick={handleExportExcel}
+                    className="w-full text-right px-3 py-2 text-sm rounded-lg hover:bg-muted transition-colors"
+                  >
+                    Excel تصدير
+                  </button>
+                </div>
+              )}
+            </div>
+          </>
+        }
       />
 
       {/* KPI Cards */}
@@ -561,5 +568,13 @@ function KpiCard({
   label: string;
   value: string;
 }) {
-  return <StatCard size="lg" icon={icon} iconBg={iconBg} label={label} value={value} />;
+  return (
+    <StatCard
+      size="lg"
+      icon={icon}
+      iconBg={iconBg}
+      label={label}
+      value={value}
+    />
+  );
 }

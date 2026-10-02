@@ -134,7 +134,7 @@ SQL
 apply_migration() {
   local container="$1"
   local file="$2"
-  local filename version checksum
+  local filename version checksum prepared_sql
   filename=$(basename "$file")
   version="${filename%.sql}"
   checksum=$(sha256sum "$file" | awk '{print $1}')
@@ -145,9 +145,13 @@ apply_migration() {
   fi
 
   echo "   ▶️  $filename"
+  if ! prepared_sql=$(node "$SCRIPT_DIR/prepare-migration-sql.mjs" "$file"); then
+    echo "   ❌ Unsafe migration transaction boundary: $filename" >&2
+    return 1
+  fi
   {
     echo "BEGIN;"
-    cat "$file"
+    printf '%s\n' "$prepared_sql"
     echo "INSERT INTO $TRACKING_TABLE (version, filename, checksum) VALUES ('$version', '$filename', '$checksum');"
     echo "COMMIT;"
   } | run_sql "$container" >/dev/null

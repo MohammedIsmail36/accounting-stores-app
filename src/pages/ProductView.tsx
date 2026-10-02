@@ -161,7 +161,7 @@ function useProductData(id: string) {
     const [imagesResult, movementsResult, avgPurchResult, avgSellResult, salesResult] = await Promise.allSettled([
       (supabase.from("product_images") as any).select("*").eq("product_id", id).order("sort_order"),
       supabase
-        .from("inventory_movements")
+        .from("inventory_movements_effective_cost")
         .select("*")
         .eq("product_id", id)
         .order("movement_date", { ascending: false })
@@ -208,7 +208,7 @@ function useProductData(id: string) {
     setMovementsError(null);
 
     const { data, error: mvError } = await supabase
-      .from("inventory_movements")
+      .from("inventory_movements_effective_cost")
       .select("*")
       .eq("product_id", id)
       .order("movement_date", { ascending: true })

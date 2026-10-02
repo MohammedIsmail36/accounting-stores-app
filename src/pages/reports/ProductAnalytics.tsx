@@ -327,7 +327,7 @@ export default function ProductAnalytics() {
     queryKey: ["pa-movements", dateFrom, dateTo],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("inventory_movements")
+        .from("inventory_movements_effective_cost")
         .select(
           "product_id, movement_type, quantity, total_cost, movement_date",
         )
@@ -374,7 +374,7 @@ export default function ProductAnalytics() {
     queryKey: ["pa-first-purchases"],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("inventory_movements")
+        .from("inventory_movements_effective_cost")
         .select("product_id, movement_date")
         .eq("movement_type", "purchase")
         .order("movement_date", { ascending: true });
