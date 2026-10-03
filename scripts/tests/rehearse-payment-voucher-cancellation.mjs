@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { resolve } from "node:path";
 
@@ -11,6 +11,10 @@ const guard = readFileSync(
   "utf8",
 );
 const containerName = `accounting-stage1-voucher-${randomBytes(5).toString("hex")}`;
+const expectMissing = process.argv.includes("--expect-missing");
+if (process.argv.length > (expectMissing ? 3 : 2)) {
+  throw new Error("Usage: node rehearse-payment-voucher-cancellation.mjs [--expect-missing]");
+}
 
 function docker(args, input) {
   return spawnSync("docker", args, { input, encoding: "utf8", maxBuffer: 1024 * 1024 });
@@ -74,7 +78,12 @@ try {
   ]);
   let ready = false;
   for (let attempt = 0; attempt < 40; attempt += 1) {
-    if (docker(["exec", containerName, "pg_isready", "-U", "postgres"]).status === 0) {
+    // The image briefly starts an initialization server; do not mistake it for the final server.
+    const initialized = docker(["logs", containerName]);
+    if (
+      String(initialized.stdout + initialized.stderr).includes("PostgreSQL init process complete") &&
+      docker(["exec", containerName, "pg_isready", "-U", "postgres"]).status === 0
+    ) {
       ready = true;
       break;
     }
@@ -84,25 +93,44 @@ try {
 
   psql(fixture);
   psql(guard);
-  for (const kind of ["customer", "supplier"]) {
-    const { payment, journal } = ids[kind];
-    const allocationTable = kind === "customer" ? "customer_payment_allocations" : "supplier_payment_allocations";
-    const before = snapshot(kind);
-    if (before.payment_status !== "posted" || before.journal_status !== "posted" || before.allocations !== 1) {
-      throw new Error(`${kind}: invalid synthetic baseline`);
+  if (expectMissing) {
+    const migrationDirectory = resolve(root, "supabase/migrations");
+    const implemented = readdirSync(migrationDirectory)
+      .filter((name) => name.endsWith(".sql"))
+      .some((name) => {
+        const sql = readFileSync(resolve(migrationDirectory, name), "utf8");
+        return /CREATE\s+(?:OR\s+REPLACE\s+)?FUNCTION\s+public\.cancel_(?:customer|supplier)_payment_atomic\s*\(/i.test(sql);
+      });
+    if (implemented) throw new Error("Proposed cancellation RPC is already present in repository migrations");
+    const existing = JSON.parse(psql(`SELECT json_build_object(
+      'customer', to_regprocedure('public.cancel_customer_payment_atomic(uuid,date,uuid,text)') IS NOT NULL,
+      'supplier', to_regprocedure('public.cancel_supplier_payment_atomic(uuid,date,uuid,text)') IS NOT NULL
+    );`));
+    if (existing.customer || existing.supplier) {
+      throw new Error(`Expected proposed cancellation RPCs to be absent: ${JSON.stringify(existing)}`);
     }
+    process.stdout.write("TDD_ATOMIC_PAYMENT_CANCELLATION_RED_OK: both proposed RPCs are absent from the isolated baseline\n");
+  } else {
+    for (const kind of ["customer", "supplier"]) {
+      const { payment, journal } = ids[kind];
+      const allocationTable = kind === "customer" ? "customer_payment_allocations" : "supplier_payment_allocations";
+      const before = snapshot(kind);
+      if (before.payment_status !== "posted" || before.journal_status !== "posted" || before.allocations !== 1) {
+        throw new Error(`${kind}: invalid synthetic baseline`);
+      }
 
-    // A single transaction rolls the allocation deletion back after the guard rejects the journal update.
-    psql(`BEGIN; DELETE FROM public.${allocationTable} WHERE payment_id = '${payment}';
-      UPDATE public.journal_entries SET status = 'cancelled' WHERE id = '${journal}'; COMMIT;`, true);
-    assertSame(snapshot(kind), before, `${kind}: atomic rollback`);
+      // A single transaction rolls the allocation deletion back after the guard rejects the journal update.
+      psql(`BEGIN; DELETE FROM public.${allocationTable} WHERE payment_id = '${payment}';
+        UPDATE public.journal_entries SET status = 'cancelled' WHERE id = '${journal}'; COMMIT;`, true);
+      assertSame(snapshot(kind), before, `${kind}: atomic rollback`);
 
-    // The current client issues separate requests. The first deletion commits before the guarded update fails.
-    psql(`DELETE FROM public.${allocationTable} WHERE payment_id = '${payment}';`);
-    psql(`UPDATE public.journal_entries SET status = 'cancelled' WHERE id = '${journal}';`, true);
-    const after = snapshot(kind);
-    assertSame(after, { ...before, allocations: 0 }, `${kind}: expected partial state`);
-    process.stdout.write(`${kind.toUpperCase()}_PARTIAL_CANCELLATION_REPRODUCED: allocation deleted; voucher and journal remain posted\n`);
+      // The current client issues separate requests. The first deletion commits before the guarded update fails.
+      psql(`DELETE FROM public.${allocationTable} WHERE payment_id = '${payment}';`);
+      psql(`UPDATE public.journal_entries SET status = 'cancelled' WHERE id = '${journal}';`, true);
+      const after = snapshot(kind);
+      assertSame(after, { ...before, allocations: 0 }, `${kind}: expected partial state`);
+      process.stdout.write(`${kind.toUpperCase()}_PARTIAL_CANCELLATION_REPRODUCED: allocation deleted; voucher and journal remain posted\n`);
+    }
   }
   process.stdout.write("DISPOSABLE_DB_ONLY; NO_STAGING_OR_PRODUCTION_WRITES\n");
 } finally {
