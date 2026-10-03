@@ -10,10 +10,11 @@ const guard = readFileSync(
   resolve(root, "supabase/migrations/20260820030015_17eeaa1f-f061-4740-9db0-c2e9287be10b.sql"),
   "utf8",
 );
+const temporalRed = readFileSync(resolve(root, "supabase/tests/payment_voucher_temporal_red.sql"), "utf8");
 const containerName = `accounting-stage1-voucher-${randomBytes(5).toString("hex")}`;
-const expectMissing = process.argv.includes("--expect-missing");
-if (process.argv.length > (expectMissing ? 3 : 2)) {
-  throw new Error("Usage: node rehearse-payment-voucher-cancellation.mjs [--expect-missing]");
+const mode = process.argv[2] || "--reproduce";
+if (process.argv.length > 3 || !["--reproduce", "--expect-missing", "--expect-history-gap"].includes(mode)) {
+  throw new Error("Usage: node rehearse-payment-voucher-cancellation.mjs [--reproduce|--expect-missing|--expect-history-gap]");
 }
 
 function docker(args, input) {
@@ -93,7 +94,7 @@ try {
 
   psql(fixture);
   psql(guard);
-  if (expectMissing) {
+  if (mode === "--expect-missing") {
     const migrationDirectory = resolve(root, "supabase/migrations");
     const implemented = readdirSync(migrationDirectory)
       .filter((name) => name.endsWith(".sql"))
@@ -110,6 +111,12 @@ try {
       throw new Error(`Expected proposed cancellation RPCs to be absent: ${JSON.stringify(existing)}`);
     }
     process.stdout.write("TDD_ATOMIC_PAYMENT_CANCELLATION_RED_OK: both proposed RPCs are absent from the isolated baseline\n");
+  } else if (mode === "--expect-history-gap") {
+    const result = psql(temporalRed);
+    if (!result.includes("PAYMENT_VOUCHER_TEMPORAL_RED_OK")) {
+      throw new Error(`Temporal red contract did not complete: ${result}`);
+    }
+    process.stdout.write(`${result}\n`);
   } else {
     for (const kind of ["customer", "supplier"]) {
       const { payment, journal } = ids[kind];
